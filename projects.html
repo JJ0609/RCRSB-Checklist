@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+(function(){
+  try{
+    var t = localStorage.getItem('pd_theme');
+    if(t === 'light' || t === 'dark'){ document.documentElement.setAttribute('data-theme', t); }
+  }catch(e){}
+})();
+</script>
+<title>Projects — Power Design Commissioning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="topbar-row">
+      <img class="logo-mark logo-for-light" src="power-design-logo-black.png" alt="Power Design">
+      <img class="logo-mark logo-for-dark" src="power-design-logo-white.png" alt="Power Design">
+      <div class="topbar-titles">
+        <div class="proj">Systems Commissioning</div>
+        <div class="sub">Choose a project</div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode"></button>
+    </div>
+    <div class="searchwrap">
+      <input class="searchbox" id="searchInput" type="text" placeholder="Search projects&hellip;">
+    </div>
+  </div>
+
+  <div class="content" id="content"></div>
+</div>
+
+<script src="config.js"></script>
+<script src="theme.js"></script>
+<script src="projects.js"></script>
+</body>
+</html>

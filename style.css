@@ -163,6 +163,8 @@ a{color:inherit;}
   font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:16px;line-height:1.2;
 }
 .topbar-titles .sub{font-size:11.5px;color:var(--topbar-text-soft);letter-spacing:.03em;text-transform:uppercase;}
+.projects-link{color:inherit;text-decoration:none;}
+.projects-link:hover{text-decoration:underline;}
 .tech-chip{
   flex:none;background:var(--topbar-overlay-1);border:1px solid var(--topbar-border-2);
   color:var(--topbar-text);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;

@@ -1,25 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // RCRSB Commissioning — app logic
 //
-// Load order matters: devices.js and config.js must load before this
-// file (they define PROJECT_DEVICES, SYNC_API_BASE, SYNC_POLL_MS which
-// this file uses). See index.html <script> tags at the bottom of <body>.
+// Load order matters: config.js must load before this file (it defines
+// SYNC_API_BASE, SYNC_POLL_MS). devices.js is no longer used — device
+// data now lives in the database and is fetched at runtime per project
+// (see fetchDevices below). See index.html <script> tags at the bottom
+// of <body>.
 // ─────────────────────────────────────────────────────────────
-/* Multi-project scaffold: each project keeps its own device list and its own
-   namespaced slice of the shared db (projects/<id>/checklist, projects/<id>/punch).
-   Today there's one project; adding another is: extract its Info Sheet the same
-   way, add a PROJECTS entry, republish. A project picker can go in the header
-   later without touching anything below. */
-const PROJECTS = {
-  "rcrsb": {
-    id: "rcrsb",
-    name: "Ritz-Carlton Residences, Sarasota Bay",
-    shortName: "RCRSB",
-    devices: PROJECT_DEVICES
-  }
-};
-let currentProject = Object.keys(PROJECTS)[0];
-let DEVICES = PROJECTS[currentProject].devices;
 
 const CHECKS = [
   {key:'power', label:'Power'},
@@ -27,6 +14,12 @@ const CHECKS = [
   {key:'function', label:'Function'}
 ];
 const SEVERITIES = ['minor','major','critical'];
+
+let currentProject = null;   // set from the ?project= URL param at boot
+let currentProjectMeta = { name: '', shortName: '' };
+let DEVICES = [];
+let LOCATIONS = [];
+let DEVICE_BY_ID = {};
 
 let checklist = {};   // deviceId -> {power,network,function}
 let punches = [];     // {id, deviceId, deviceName, location, description, severity, status, reportedBy, createdAt, resolvedBy, resolvedAt}
@@ -42,18 +35,18 @@ let punchDraftText = {};
 let syncEnabled = false;
 let pollTimer = null;
 
-const LOCATIONS = (function(){
+function rebuildDeviceIndexes(){
   const map = {};
   DEVICES.forEach(function(d){
     if(!map[d.location]) map[d.location] = [];
     map[d.location].push(d);
   });
-  return Object.keys(map).sort().map(function(name){
+  LOCATIONS = Object.keys(map).sort().map(function(name){
     return {name: name, devices: map[name]};
   });
-})();
-const DEVICE_BY_ID = {};
-DEVICES.forEach(function(d){ DEVICE_BY_ID[d.id] = d; });
+  DEVICE_BY_ID = {};
+  DEVICES.forEach(function(d){ DEVICE_BY_ID[d.id] = d; });
+}
 
 function loadCache(){
   try{
@@ -358,6 +351,26 @@ async function fetchRemoteState(){
   return apiCall('/api/state?project=' + encodeURIComponent(currentProject), {method: 'GET'});
 }
 
+async function fetchDevicesAndMeta(){
+  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject), {method: 'GET'});
+}
+
+function deviceCacheKey(){
+  return 'pd_devices_cache_' + currentProject;
+}
+function saveDeviceCache(meta, devices){
+  try{
+    localStorage.setItem(deviceCacheKey(), JSON.stringify({meta: meta, devices: devices, cachedAt: new Date().toISOString()}));
+  }catch(e){}
+}
+function loadDeviceCache(){
+  try{
+    const raw = localStorage.getItem(deviceCacheKey());
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+
 async function pushCheck(deviceId, key, value){
   return apiCall('/api/check', {
     method: 'POST',
@@ -591,48 +604,76 @@ document.getElementById('techChip').addEventListener('click', function(){
   }
 });
 
-// ---------- theme (light/dark) ----------
-const THEME_KEY = 'pd_theme';
-const SUN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line></svg>';
-const MOON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-
-function effectiveTheme(){
-  let stored = null;
-  try{ stored = localStorage.getItem(THEME_KEY); }catch(e){}
-  if(stored === 'light' || stored === 'dark') return stored;
-  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-}
-function applyTheme(theme){
-  document.documentElement.setAttribute('data-theme', theme);
-  const btn = document.getElementById('themeToggle');
-  // Icon shown = the mode a click will switch you TO.
-  btn.innerHTML = theme === 'dark' ? SUN_ICON : MOON_ICON;
-  const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
-}
-document.getElementById('themeToggle').addEventListener('click', function(){
-  const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
-  try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
-  applyTheme(next);
-});
-applyTheme(effectiveTheme());
-
 // ---------- boot ----------
-(function(){
-  const proj = PROJECTS[currentProject];
-  document.getElementById('projSub').textContent = proj.shortName + ' · ' + proj.name;
-})();
-loadCache();
-renderContent();
+function renderFatalError(title, message){
+  document.getElementById('content').innerHTML =
+    '<div class="empty" style="padding:60px 20px;">'
+    + '<div style="font-weight:800;font-size:16px;margin-bottom:6px;color:var(--ink);">' + esc(title) + '</div>'
+    + '<div>' + esc(message) + '</div>'
+    + '<div style="margin-top:14px;"><a href="projects.html" style="color:var(--accent);font-weight:700;">&larr; Back to projects</a></div>'
+    + '</div>';
+}
 
-// Real-time push (onSnapshot) isn't available with this backend, so instead
-// we do an immediate sync on load, then poll on an interval. Every write
-// still applies to the local copy immediately (optimistic UI) before the
-// network call goes out, so the app feels instant even on a slow connection.
-if(syncConfigured()){
+async function boot(){
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('project');
+
+  if(!projectId){
+    window.location.href = 'projects.html';
+    return;
+  }
+  currentProject = projectId;
+
+  if(!syncConfigured()){
+    renderFatalError(
+      'Not connected',
+      'SYNC_API_BASE is not set in config.js. Device data now lives in the database, so this app can\'t run without a configured Worker. See README.md.'
+    );
+    return;
+  }
+
+  let loaded = false;
+  try{
+    const data = await fetchDevicesAndMeta();
+    DEVICES = data.devices || [];
+    currentProjectMeta = data.project || {name: projectId, shortName: projectId};
+    saveDeviceCache(currentProjectMeta, DEVICES);
+    syncEnabled = true;
+    loaded = true;
+  }catch(e){
+    console.error(e);
+    const cached = loadDeviceCache();
+    if(cached && cached.devices && cached.devices.length){
+      DEVICES = cached.devices;
+      currentProjectMeta = cached.meta || {name: projectId, shortName: projectId};
+      syncEnabled = false;
+      loaded = true;
+    }
+  }
+
+  if(!loaded){
+    renderFatalError(
+      'Couldn\'t load this project',
+      'No connection to the server and no offline copy saved on this device yet. Check your connection and try again.'
+    );
+    return;
+  }
+
+  rebuildDeviceIndexes();
+  document.getElementById('projTitle').textContent = 'Systems Commissioning';
+  document.getElementById('projSub').textContent =
+    (currentProjectMeta.shortName || currentProjectMeta.name) + ' · ' + currentProjectMeta.name;
+  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' Commissioning';
+
+  loadCache();
+  renderContent();
+
+  // Real-time push (onSnapshot) isn't available with this backend, so instead
+  // we do an immediate sync on load, then poll on an interval. Every write
+  // still applies to the local copy immediately (optimistic UI) before the
+  // network call goes out, so the app feels instant even on a slow connection.
   syncFromRemote();
   pollTimer = setInterval(syncFromRemote, SYNC_POLL_MS);
-} else {
-  console.warn('SYNC_API_BASE is not configured — running in local-only (single device) mode. See README.md.');
 }
+
+boot();
