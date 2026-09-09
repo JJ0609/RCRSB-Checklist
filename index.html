@@ -3,6 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+// Applied before stylesheets load so there's no flash of the wrong theme.
+// This is the one thing intentionally inlined rather than split into
+// app.js — it has to run before first paint, so it can't wait for an
+// external file to load.
+(function(){
+  try{
+    var t = localStorage.getItem('pd_theme');
+    if(t === 'light' || t === 'dark'){ document.documentElement.setAttribute('data-theme', t); }
+  }catch(e){}
+})();
+</script>
 <title>RCRSB Commissioning</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
@@ -19,6 +31,7 @@
         <div class="sub" id="projSub">RCRSB &middot; Ritz-Carlton Residences, Sarasota Bay</div>
       </div>
       <button class="tech-chip" id="techChip" type="button">Set your name</button>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode"></button>
     </div>
     <div class="stats-row">
       <div class="stat">
