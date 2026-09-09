@@ -1,0 +1,7 @@
+name = "rcrsb-commissioning-sync"
+main = "index.js"
+compatibility_date = "2024-09-01"
+
+# Non-secret vars can go here, but ALLOWED_ORIGIN is set as a secret too so
+# it can be changed without a redeploy. See README.md for the exact
+# `wrangler secret put` / dashboard steps.
