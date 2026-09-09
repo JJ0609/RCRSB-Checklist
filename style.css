@@ -29,6 +29,19 @@ img{max-width:100%}
   --open-bg:#FCEEDD;
   --shadow: 0 1px 2px rgba(23,20,15,0.06), 0 8px 24px -12px rgba(23,20,15,0.18);
   --focus: 0 0 0 3px rgba(200,16,46,0.35);
+
+  /* The header bar used to be hardcoded near-black in every theme.
+     These tokens let it actually follow light/dark mode instead. */
+  --topbar-bg:#F1EBE3;
+  --topbar-text:#17140F;
+  --topbar-text-soft:#4A453D;
+  --topbar-overlay-1: rgba(23,20,15,0.045);
+  --topbar-overlay-2: rgba(23,20,15,0.09);
+  --topbar-border-1: rgba(23,20,15,0.10);
+  --topbar-border-2: rgba(23,20,15,0.18);
+  --topbar-placeholder: rgba(23,20,15,0.42);
+  --topbar-warn:#B5620A;
+  --topbar-fail:#C8102E;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -52,6 +65,17 @@ img{max-width:100%}
     --open:#E8A244;
     --open-bg:#3A2A10;
     --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
+
+    --topbar-bg:#0F0D0B;
+    --topbar-text:#F6F1EA;
+    --topbar-text-soft:#C9C1B4;
+    --topbar-overlay-1: rgba(255,255,255,0.06);
+    --topbar-overlay-2: rgba(255,255,255,0.12);
+    --topbar-border-1: rgba(255,255,255,0.12);
+    --topbar-border-2: rgba(255,255,255,0.16);
+    --topbar-placeholder: rgba(255,255,255,0.45);
+    --topbar-warn:#F3B968;
+    --topbar-fail:#FF8CA0;
   }
 }
 :root[data-theme="dark"]{
@@ -75,6 +99,17 @@ img{max-width:100%}
   --open:#E8A244;
   --open-bg:#3A2A10;
   --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
+
+  --topbar-bg:#0F0D0B;
+  --topbar-text:#F6F1EA;
+  --topbar-text-soft:#C9C1B4;
+  --topbar-overlay-1: rgba(255,255,255,0.06);
+  --topbar-overlay-2: rgba(255,255,255,0.12);
+  --topbar-border-1: rgba(255,255,255,0.12);
+  --topbar-border-2: rgba(255,255,255,0.16);
+  --topbar-placeholder: rgba(255,255,255,0.45);
+  --topbar-warn:#F3B968;
+  --topbar-fail:#FF8CA0;
 }
 
 *{box-sizing:border-box;}
@@ -104,62 +139,61 @@ a{color:inherit;}
 /* ---------- header ---------- */
 .topbar{
   position:sticky;top:0;z-index:30;
-  background:var(--ink);
-  color:#F6F1EA;
+  background:var(--topbar-bg);
+  color:var(--topbar-text);
   padding:14px 18px 0;
   box-shadow:var(--shadow);
 }
-:root:not([data-theme="light"]) .topbar{background:#0F0D0B;}
 .topbar-row{display:flex;align-items:center;gap:12px;}
 .topbar-row img{height:22px;width:auto;display:block;flex:none;}
 .topbar-titles{flex:1;min-width:0;}
 .topbar-titles .proj{
   font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:16px;line-height:1.2;
 }
-.topbar-titles .sub{font-size:11.5px;color:#C9C1B4;letter-spacing:.03em;text-transform:uppercase;}
+.topbar-titles .sub{font-size:11.5px;color:var(--topbar-text-soft);letter-spacing:.03em;text-transform:uppercase;}
 .tech-chip{
-  flex:none;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
-  color:#F6F1EA;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;
+  flex:none;background:var(--topbar-overlay-1);border:1px solid var(--topbar-border-2);
+  color:var(--topbar-text);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;
   cursor:pointer;white-space:nowrap;
 }
-.tech-chip:hover{background:rgba(255,255,255,0.14);}
+.tech-chip:hover{background:var(--topbar-overlay-2);}
 
 .theme-toggle{
   flex:none;width:34px;height:34px;padding:0;
-  background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
-  color:#F6F1EA;border-radius:999px;cursor:pointer;
+  background:var(--topbar-overlay-1);border:1px solid var(--topbar-border-2);
+  color:var(--topbar-text);border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
 }
-.theme-toggle:hover{background:rgba(255,255,255,0.14);}
+.theme-toggle:hover{background:var(--topbar-overlay-2);}
 .theme-toggle svg{width:16px;height:16px;display:block;}
 
 .stats-row{display:flex;gap:10px;margin:14px 0 12px;}
 .stat{
-  flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+  flex:1;background:var(--topbar-overlay-1);border:1px solid var(--topbar-border-1);
   border-radius:12px;padding:10px 12px;min-width:0;
 }
 .stat .num{font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:22px;line-height:1;}
-.stat .lbl{font-size:11px;color:#C9C1B4;margin-top:3px;letter-spacing:.02em;}
-.stat.accent .num{color:#FF8CA0;}
+.stat .lbl{font-size:11px;color:var(--topbar-text-soft);margin-top:3px;letter-spacing:.02em;}
+.stat.accent .num{color:var(--topbar-fail);}
 .stat.clickable{cursor:pointer;transition:background 0.12s ease,border-color 0.12s ease;}
-.stat.clickable:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.22);}
+.stat.clickable:hover{background:var(--topbar-overlay-2);border-color:var(--topbar-border-2);}
 .stat.clickable:focus-visible{outline:none;box-shadow:var(--focus);}
-.stat.warn .num{color:#F3B968;}
-.progress-track{height:5px;border-radius:3px;background:rgba(255,255,255,0.12);margin-top:8px;overflow:hidden;}
+.stat.warn .num{color:var(--topbar-warn);}
+.progress-track{height:5px;border-radius:3px;background:var(--topbar-overlay-2);margin-top:8px;overflow:hidden;}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent-deep),var(--accent));border-radius:3px;transition:width .3s ease;}
 
 .searchwrap{padding:0 0 12px;}
 .searchbox{
-  width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
-  border-radius:10px;padding:10px 12px;color:#F6F1EA;font-size:14.5px;
+  width:100%;background:var(--topbar-overlay-1);border:1px solid var(--topbar-border-2);
+  border-radius:10px;padding:10px 12px;color:var(--topbar-text);font-size:14.5px;
 }
-.searchbox::placeholder{color:#B8AFA0;}
-.searchbox:focus{outline:none;box-shadow:var(--focus);background:rgba(255,255,255,0.12);}
+.searchbox::placeholder{color:var(--topbar-placeholder);}
+.searchbox:focus{outline:none;box-shadow:var(--focus);background:var(--topbar-overlay-2);}
 
 .tabs{display:flex;gap:6px;padding:0 0 12px;}
 .tab{
-  flex:1;text-align:center;padding:9px 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.14);
-  background:transparent;color:#D8D1C4;font-weight:600;font-size:13.5px;cursor:pointer;
+  flex:1;text-align:center;padding:9px 10px;border-radius:9px;border:1px solid var(--topbar-border-1);
+  background:transparent;color:var(--topbar-text-soft);font-weight:600;font-size:13.5px;cursor:pointer;
 }
 .tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 
