@@ -1,0 +1,883 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>RCRSB Commissioning (Copy)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ink:#17140F;
+  --ink-soft:#4A453D;
+  --bg:#FAF7F3;
+  --surface:#FFFFFF;
+  --surface-2:#F1EBE3;
+  --surface-3:#E9E1D6;
+  --border:#E3D9CC;
+  --border-strong:#CFC1AE;
+  --accent:#C8102E;
+  --accent-deep:#971B2F;
+  --accent-ink:#FFFFFF;
+  --pass:#1F7A4D;
+  --pass-bg:#E4F3EA;
+  --fail:#C8102E;
+  --fail-bg:#FBE7EA;
+  --pending:#8A8271;
+  --pending-bg:#F1EBE3;
+  --open:#B5620A;
+  --open-bg:#FCEEDD;
+  --shadow: 0 1px 2px rgba(23,20,15,0.06), 0 8px 24px -12px rgba(23,20,15,0.18);
+  --focus: 0 0 0 3px rgba(200,16,46,0.35);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#F3EFE8;
+    --ink-soft:#C9C1B4;
+    --bg:#161311;
+    --surface:#1E1A16;
+    --surface-2:#26211C;
+    --surface-3:#2E2822;
+    --border:#3A332B;
+    --border-strong:#4A4136;
+    --accent:#E63A56;
+    --accent-deep:#FF6B82;
+    --accent-ink:#1A0507;
+    --pass:#49C186;
+    --pass-bg:#173226;
+    --fail:#E9536B;
+    --fail-bg:#3A1B20;
+    --pending:#9A9282;
+    --pending-bg:#2A2620;
+    --open:#E8A244;
+    --open-bg:#3A2A10;
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#F3EFE8;
+  --ink-soft:#C9C1B4;
+  --bg:#161311;
+  --surface:#1E1A16;
+  --surface-2:#26211C;
+  --surface-3:#2E2822;
+  --border:#3A332B;
+  --border-strong:#4A4136;
+  --accent:#E63A56;
+  --accent-deep:#FF6B82;
+  --accent-ink:#1A0507;
+  --pass:#49C186;
+  --pass-bg:#173226;
+  --fail:#E9536B;
+  --fail-bg:#3A1B20;
+  --pending:#9A9282;
+  --pending-bg:#2A2620;
+  --open:#E8A244;
+  --open-bg:#3A2A10;
+  --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
+}
+
+*{box-sizing:border-box;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'Source Sans 3',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.display{
+  font-family:'Libre Franklin',system-ui,sans-serif;
+  font-weight:800;
+  text-wrap:balance;
+  letter-spacing:-0.01em;
+}
+.mono{
+  font-family:'JetBrains Mono',ui-monospace,monospace;
+  font-variant-numeric:tabular-nums;
+}
+button{font-family:inherit;}
+a{color:inherit;}
+::selection{background:var(--accent);color:var(--accent-ink);}
+:focus-visible{outline:none;box-shadow:var(--focus);border-radius:6px;}
+
+.app{max-width:920px;margin:0 auto;padding-bottom:64px;}
+
+/* ---------- header ---------- */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  background:var(--ink);
+  color:#F6F1EA;
+  padding:14px 18px 0;
+  box-shadow:var(--shadow);
+}
+:root:not([data-theme="light"]) .topbar{background:#0F0D0B;}
+.topbar-row{display:flex;align-items:center;gap:12px;}
+.topbar-row img{height:22px;width:auto;display:block;flex:none;}
+.topbar-titles{flex:1;min-width:0;}
+.topbar-titles .proj{
+  font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:16px;line-height:1.2;
+}
+.topbar-titles .sub{font-size:11.5px;color:#C9C1B4;letter-spacing:.03em;text-transform:uppercase;}
+.tech-chip{
+  flex:none;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
+  color:#F6F1EA;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+.tech-chip:hover{background:rgba(255,255,255,0.14);}
+
+.stats-row{display:flex;gap:10px;margin:14px 0 12px;}
+.stat{
+  flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+  border-radius:12px;padding:10px 12px;min-width:0;
+}
+.stat .num{font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:22px;line-height:1;}
+.stat .lbl{font-size:11px;color:#C9C1B4;margin-top:3px;letter-spacing:.02em;}
+.stat.accent .num{color:#FF8CA0;}
+.stat.warn .num{color:#F3B968;}
+.progress-track{height:5px;border-radius:3px;background:rgba(255,255,255,0.12);margin-top:8px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent-deep),var(--accent));border-radius:3px;transition:width .3s ease;}
+
+.searchwrap{padding:0 0 12px;}
+.searchbox{
+  width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);
+  border-radius:10px;padding:10px 12px;color:#F6F1EA;font-size:14.5px;
+}
+.searchbox::placeholder{color:#B8AFA0;}
+.searchbox:focus{outline:none;box-shadow:var(--focus);background:rgba(255,255,255,0.12);}
+
+.tabs{display:flex;gap:6px;padding:0 0 12px;}
+.tab{
+  flex:1;text-align:center;padding:9px 10px;border-radius:9px;border:1px solid rgba(255,255,255,0.14);
+  background:transparent;color:#D8D1C4;font-weight:600;font-size:13.5px;cursor:pointer;
+}
+.tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+/* ---------- content ---------- */
+.content{padding:16px 16px 0;}
+.section-label{
+  font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);
+  font-weight:700;margin:4px 2px 10px;
+}
+.offline-banner{
+  margin:0 0 14px;padding:10px 12px;border-radius:10px;background:var(--open-bg);color:var(--open);
+  font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;
+}
+.offline-banner{align-items:flex-start;}
+.offline-banner .dot{width:7px;height:7px;border-radius:50%;background:var(--open);flex:none;margin-top:5px;}
+
+.loc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;}
+.loc-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 15px;
+  text-align:left;cursor:pointer;box-shadow:var(--shadow);
+}
+.loc-card:hover{border-color:var(--border-strong);}
+.loc-card .name{font-size:15px;font-weight:800;font-family:'Libre Franklin',sans-serif;margin-bottom:2px;text-wrap:balance;}
+.loc-card .meta{font-size:12px;color:var(--ink-soft);margin-bottom:10px;}
+.loc-card .bar{height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;display:flex;}
+.loc-card .bar span{height:100%;}
+.loc-card .footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;}
+.badge{
+  display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:700;
+}
+.badge.open{background:var(--open-bg);color:var(--open);}
+.badge.done{background:var(--pass-bg);color:var(--pass);}
+
+/* ---------- location detail ---------- */
+.back-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.back-btn{
+  background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:7px 12px;
+  font-size:13px;font-weight:700;cursor:pointer;color:var(--ink);
+}
+.back-btn:hover{background:var(--surface-3);}
+.loc-header{margin-bottom:12px;}
+.loc-header h2{font-size:21px;margin:0 0 4px;}
+.loc-header .meta{font-size:13px;color:var(--ink-soft);}
+
+.device-list{display:flex;flex-direction:column;gap:10px;}
+.device-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:12px 13px;box-shadow:var(--shadow);
+}
+.device-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+.device-name{font-weight:800;font-size:14.5px;font-family:'Libre Franklin',sans-serif;}
+.device-model{font-size:12px;color:var(--ink-soft);margin-top:1px;}
+.device-data{display:flex;flex-wrap:wrap;gap:x;column-gap:14px;row-gap:2px;margin-top:6px;font-size:11.5px;color:var(--ink-soft);}
+.device-data span b{color:var(--ink);font-weight:600;}
+.device-note{margin-top:6px;font-size:12px;color:var(--open);background:var(--open-bg);padding:5px 8px;border-radius:7px;}
+
+.check-row{display:flex;gap:6px;margin-top:10px;}
+.check-pill{
+  flex:1;border-radius:9px;border:1.5px solid var(--border);background:var(--surface-2);
+  padding:7px 4px;text-align:center;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--ink-soft);
+}
+.check-pill .k{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;opacity:.75;margin-bottom:1px;}
+.check-pill.pass{background:var(--pass-bg);border-color:var(--pass);color:var(--pass);}
+.check-pill.fail{background:var(--fail-bg);border-color:var(--fail);color:var(--fail);}
+
+.punch-add-btn{
+  margin-top:9px;width:100%;background:none;border:1.5px dashed var(--border-strong);border-radius:9px;
+  padding:7px;font-size:12.5px;font-weight:700;color:var(--ink-soft);cursor:pointer;
+}
+.punch-add-btn:hover{color:var(--accent);border-color:var(--accent);}
+
+.punch-form{margin-top:10px;padding:10px;background:var(--surface-2);border-radius:10px;display:flex;flex-direction:column;gap:8px;}
+.punch-form textarea{
+  width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;
+  resize:vertical;min-height:52px;background:var(--surface);color:var(--ink);
+}
+.sev-row{display:flex;gap:6px;}
+.sev-btn{flex:1;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);padding:6px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-soft);}
+.sev-btn.sel[data-sev="minor"]{background:var(--pending-bg);border-color:var(--pending);color:var(--ink);}
+.sev-btn.sel[data-sev="major"]{background:var(--open-bg);border-color:var(--open);color:var(--open);}
+.sev-btn.sel[data-sev="critical"]{background:var(--fail-bg);border-color:var(--fail);color:var(--fail);}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;}
+.btn{border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--ink);}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn.primary:hover{background:var(--accent-deep);}
+.btn.ghost:hover{background:var(--surface-3);}
+
+.empty{padding:40px 10px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
+
+/* ---------- punch list view ---------- */
+.punch-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+.chip{
+  border-radius:999px;border:1.5px solid var(--border);background:var(--surface);padding:6px 13px;
+  font-size:12.5px;font-weight:700;cursor:pointer;color:var(--ink-soft);
+}
+.chip.active{background:var(--ink);border-color:var(--ink);color:var(--bg);}
+.punch-toolbar select{
+  border-radius:999px;border:1.5px solid var(--border);background:var(--surface);padding:6px 12px;
+  font-size:12.5px;font-weight:600;color:var(--ink);margin-left:auto;
+}
+.export-btn{
+  border-radius:999px;border:1.5px solid var(--border-strong);background:var(--surface);padding:6px 13px;
+  font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;
+}
+.export-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+.punch-item{
+  display:flex;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:12px 13px;margin-bottom:9px;box-shadow:var(--shadow);
+}
+.sev-stripe{width:4px;border-radius:3px;flex:none;}
+.sev-stripe.minor{background:var(--pending);}
+.sev-stripe.major{background:var(--open);}
+.sev-stripe.critical{background:var(--fail);}
+.punch-body{flex:1;min-width:0;}
+.punch-body .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
+.punch-body .loc-dev{font-weight:700;font-size:13.5px;}
+.punch-body .loc-dev .loc{color:var(--ink-soft);font-weight:600;}
+.punch-body .desc{font-size:13.5px;margin:5px 0 6px;}
+.punch-body .meta{font-size:11px;color:var(--ink-soft);display:flex;gap:10px;flex-wrap:wrap;}
+.status-btn{
+  flex:none;align-self:flex-start;border-radius:999px;padding:5px 12px;font-size:11.5px;font-weight:700;
+  border:1.5px solid var(--open);background:var(--open-bg);color:var(--open);cursor:pointer;
+}
+.status-btn.resolved{border-color:var(--pass);background:var(--pass-bg);color:var(--pass);}
+
+.name-banner{
+  background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;
+  display:flex;gap:8px;align-items:center;margin-bottom:14px;font-size:13px;
+}
+.name-banner input{flex:1;border:1px solid var(--border);border-radius:7px;padding:6px 9px;font-size:13px;background:var(--surface);color:var(--ink);}
+.name-banner button{flex:none;}
+
+@media(min-width:640px){
+  .topbar,.content{padding-left:28px;padding-right:28px;}
+}
+</style>
+
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="topbar-row">
+      <img src="data:image/png;base64,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" alt="Power Design">
+      <div class="topbar-titles">
+        <div class="proj" id="projTitle">Systems Commissioning</div>
+        <div class="sub" id="projSub">RCRSB &middot; Ritz-Carlton Residences, Sarasota Bay</div>
+      </div>
+      <button class="tech-chip" id="techChip" type="button">Set your name</button>
+    </div>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="num" id="statTested">0/0</div>
+        <div class="lbl">DEVICES TESTED</div>
+        <div class="progress-track"><div class="progress-fill" id="statBar" style="width:0%"></div></div>
+      </div>
+      <div class="stat warn">
+        <div class="num" id="statOpen">0</div>
+        <div class="lbl">OPEN PUNCH ITEMS</div>
+      </div>
+      <div class="stat accent">
+        <div class="num" id="statFail">0</div>
+        <div class="lbl">FAILED CHECKS</div>
+      </div>
+    </div>
+    <div class="searchwrap">
+      <input class="searchbox" id="searchInput" type="text" placeholder="Search a location or device&hellip;">
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tabLocations" type="button">By Location</button>
+      <button class="tab" id="tabPunch" type="button">Punch List</button>
+    </div>
+  </div>
+
+  <div class="content" id="content"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// SYNC CONFIG — the only thing you need to edit before deploying.
+// Point this at your deployed Cloudflare Worker (see README.md).
+// Leave it as-is to run in local-only mode (no cross-device sync).
+// ─────────────────────────────────────────────────────────────
+const SYNC_API_BASE = "https://rcrsb-commissioning-sync.jjcampbell06092004.workers.dev/";
+const SYNC_POLL_MS = 5000;
+
+const PROJECT_DEVICES = [{"name":"R1-STR-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"WATTBOX | WB-800VPS-IPVM-12","ip":"10.96.123.10","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-str-01"},{"name":"R2-STR-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"WATTBOX | WB-800VPS-IPVM-12","ip":"10.96.123.11","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-str-01"},{"name":"R2-IR-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | CEN-IO-IR-104","ip":"10.96.123.20","ipid":"IPID: 20","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-ir-01"},{"name":"R2-IR-02","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | CEN-IO-IR-104","ip":"10.96.123.21","ipid":"IPID: 21","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-ir-02"},{"name":"R1-AMR-01","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | AM-3100-WF","ip":"10.96.123.22","ipid":"IPID: 22","avio":"","note":"","ports":[{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-amr-01"},{"name":"R2-AMR-01","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"CRESTRON | AM-3100-WF","ip":"10.96.123.23","ipid":"IPID: 23","avio":"","note":"Client Network Connection","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-amr-01"},{"name":"R2-AMR-02","status":"Pending","level":"LEVEL 3","location":"LOUNGE 329","model":"CRESTRON | AM-3100-WF","ip":"10.96.123.24","ipid":"IPID: 24","avio":"","note":"Client Network Connection","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-amr-02"},{"name":"R2-PR-01","status":"Pending","level":"LEVEL 3","location":"BOARD ROOM 314","model":"CRESTRON | UC-PR","ip":"10.96.123.25","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-pr-01"},{"name":"R1-DSP-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"BIAMP | TesiraFORTE DAN AI","ip":"10.96.123.30","ipid":"","avio":"FIRE ALARM \u2192 LOGIC I/O: 1,0","note":"","ports":[],"id":"r1-dsp-01"},{"name":"R2-DSP-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"BIAMP | TesiraFORTE DAN AI","ip":"10.96.123.31","ipid":"","avio":"","note":"","ports":[],"id":"r2-dsp-01"},{"name":"R1-PRO-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | CP4","ip":"10.96.123.50","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-pro-01"},{"name":"R1-NVX-01","status":"Offline","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-DIR2","ip":"","ipid":"","avio":"","note":"N/A","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-nvx-01"},{"name":"R1-MMS-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"AUTONOMIC | MMS-5E","ip":"10.96.123.60","ipid":"","avio":"","note":"This should be NAX","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-mms-01"},{"name":"R1-MPR-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CE LAB | MP90R","ip":"10.96.123.61","ipid":"","avio":"MP90R, HDMI OUT 1 \u2192 R1-DTX-01, HDMI IN 1","note":"Media Player","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-mpr-01"},{"name":"R1-TP1-01","status":"Pending","level":"LEVEL 1","location":"PRIVATE TRAINING 139","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.70","ipid":"IP ID: 30","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp1-01"},{"name":"R1-TP1-02","status":"Pending","level":"LEVEL 1","location":"SPORTS ROOM 136","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.71","ipid":"IP ID: 31","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp1-02"},{"name":"R1-TP1-03","status":"Pending","level":"LEVEL 1","location":"WELLNESS CENTER CLUB 119","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.72","ipid":"IP ID: 32","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp1-03"},{"name":"R1-TP1-05","status":"Pending","level":"LEVEL 1","location":"TREATMENT ROOM 1 - 134","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.73","ipid":"IP ID: 33","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp1-05"},{"name":"R1-TP1-06","status":"Pending","level":"LEVEL 1","location":"TREATMENT ROOM 2 - 135","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.74","ipid":"IP ID: 34","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp1-06"},{"name":"R1-TP1-04","status":"Pending","level":"LEVEL 1","location":"SPA AREA","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.75","ipid":"IP ID: 35","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp1-04"},{"name":"R1-TP2-01","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | TSW-770-W-S","ip":"10.96.123.76","ipid":"IP ID: 36","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp2-01"},{"name":"R1-TP2-02","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"CRESTRON | TSW-770-W-S","ip":"10.96.123.77","ipid":"IP ID: 37","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tp2-02"},{"name":"R2-TP1-01","status":"Pending","level":"LEVEL 3","location":"EXTERIOR","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.78","ipid":"IP ID: 38","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tp1-01"},{"name":"R2-TP1-02","status":"Pending","level":"LEVEL 3","location":"LOBBY 301","model":"CRESTRON | TSW-570P-W-S","ip":"10.96.123.79","ipid":"IP ID: 39","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tp1-02"},{"name":"R2-TP2-01","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"CRESTRON | TSW-770-W-S","ip":"10.96.123.80","ipid":"IP ID: 3A","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tp2-01"},{"name":"R2-TP2-03","status":"Pending","level":"LEVEL 3","location":"LOUNGE 329","model":"CRESTRON | TSW-770-W-S","ip":"10.96.123.81","ipid":"IP ID: 3B","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tp2-03"},{"name":"R2-TP2-02","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"CRESTRON | TSW-770-W-S","ip":"10.96.123.82","ipid":"IP ID: 3C","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tp2-02"},{"name":"R2-TP3-01","status":"Pending","level":"LEVEL 3","location":"BOARD ROOM 314","model":"CRESTRON | TS-1070-B-S-T-V","ip":"10.96.123.83","ipid":"IP ID: 3D","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tp3-01"},{"name":"R1-AMP-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CROWN | DCI 8|300DA","ip":"10.96.123.150","ipid":"","avio":"","note":"","ports":[],"id":"r1-amp-01"},{"name":"R2-AMP-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"CROWN | DCI 8|300DA","ip":"10.96.123.151","ipid":"","avio":"","note":"","ports":[],"id":"r2-amp-01"},{"name":"R1-VWP-01","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.170","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-01"},{"name":"R1-VWP-02","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.171","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-02"},{"name":"R1-VWP-03","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.172","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-03"},{"name":"R1-VWP-04","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.173","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-04"},{"name":"R1-VWP-05","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.174","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-05"},{"name":"R1-VWP-06","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.175","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-06"},{"name":"R1-VWP-07","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.176","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-07"},{"name":"R1-VWP-08","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.177","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-08"},{"name":"R1-VWP-09","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SAMSUNG | VH55R-R","ip":"10.96.107.178","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-vwp-09"},{"name":"R1-TV4-01","status":"Pending","level":"LEVEL 1","location":"PRIVATE TRAINING 139","model":"SONY | XR-55X90L","ip":"10.96.107.179","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tv4-01"},{"name":"R1-TV4-02","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"SONY | XR-55X90L","ip":"10.96.107.180","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tv4-02"},{"name":"R1-TV4-03","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"SONY | XR-55X90L","ip":"10.96.107.181","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tv4-03"},{"name":"R1-TV4-04","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"SONY | XR-55X90L","ip":"10.96.107.182","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tv4-04"},{"name":"R1-TV1-01","status":"Pending","level":"LEVEL 1","location":"SPORTS ROOM 136","model":"SONY | XR-65X90L","ip":"10.96.107.183","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-tv1-01"},{"name":"R2-TV5-01","status":"Pending","level":"LEVEL 3","location":"EXTERIOR","model":"SAMSUNG | QN65LST7TAF","ip":"10.96.107.184","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tv5-01"},{"name":"R2-TV2-01","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"SONY | XR-75X90L","ip":"10.96.107.185","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tv2-01"},{"name":"R2-TV3-01","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"SONY | XR-85X90L","ip":"10.96.107.186","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tv3-01"},{"name":"R2-VWP-01","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"SAMSUNG | VH55R-R","ip":"10.96.107.187","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-vwp-01"},{"name":"R2-VWP-02","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"SAMSUNG | VH55R-R","ip":"10.96.107.188","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-vwp-02"},{"name":"R2-VWP-03","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"SAMSUNG | VH55R-R","ip":"10.96.107.189","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-vwp-03"},{"name":"R2-VWP-04","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"SAMSUNG | VH55R-R","ip":"10.96.107.190","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-vwp-04"},{"name":"R2-TV2-02","status":"Pending","level":"LEVEL 3","location":"LOUNGE 329","model":"SONY | XR-75X90L","ip":"10.96.107.191","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tv2-02"},{"name":"R2-TV1-01","status":"Pending","level":"LEVEL 3","location":"BOARD ROOM 314","model":"SONY | XR-65X90L","ip":"10.96.107.192","ipid":"","avio":"HDMI IN 1: UC-PR","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tv1-01"},{"name":"R2-TV4-01","status":"Pending","level":"LEVEL 2","location":"EMPLOYEE BREAKROOM 209","model":"SONY | XR-55X90L","ip":"10.96.107.193","ipid":"","avio":"","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-tv4-01"},{"name":"R1-CPU-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"BEELINK | EQRS","ip":"DHCP","ipid":"","avio":"","note":"","ports":[],"id":"r1-cpu-01"},{"name":"R1-ROU-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"FORTINET | FORTIGATE","ip":"10.96.107.254","ipid":"","avio":"","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-rou-01"},{"name":"R1-CPU-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"BEELINK | EQRS","ip":"DHCP","ipid":"","avio":"","note":"Network Port 2 \u2192 Dante VLAN","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-cpu-01-2"},{"name":"R1-DSP-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"BIAMP | TesiraFORTE DAN AI","ip":"DHCP","ipid":"","avio":"","note":"Network Port 2 \u2192 Dante VLAN","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dsp-01-2"},{"name":"R2-DSP-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"BIAMP | TesiraFORTE DAN AI","ip":"DHCP","ipid":"","avio":"","note":"Network Port 2 \u2192 Dante VLAN","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dsp-01-2"},{"name":"R1-AMP-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CROWN | DCI 8|300DA","ip":"DHCP","ipid":"","avio":"","note":"Network Port 2 \u2192 Dante VLAN","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-amp-01-2"},{"name":"R2-AMP-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"CROWN | DCI 8|300DA","ip":"DHCP","ipid":"","avio":"","note":"Network Port 2 \u2192 Dante VLAN","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-amp-01-2"},{"name":"R1-CNV-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"RDL | SF-BNC2","ip":"DHCP","ipid":"","avio":"OFE SOURCE \u2192 RCA INPUT","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-cnv-01"},{"name":"R2-CNV-01","status":"Pending","level":"LEVEL 3","location":"ELEC 309 | AV RACK 2","model":"RDL | SF-BNC2","ip":"DHCP","ipid":"","avio":"OFE SOURCE \u2192 RCA INPUT","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-cnv-01"},{"name":"R1-BT-01","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"SYMETRIX | xIO BLUETOOTH","ip":"DHCP","ipid":"","avio":"","note":"DD-BTN44 Ordered","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-bt-01"},{"name":"R1-BT-02","status":"Pending","level":"LEVEL 1","location":"PRIVATE TRAINING 139","model":"SYMETRIX | xIO BLUETOOTH","ip":"DHCP","ipid":"","avio":"","note":"DD-BTN44 Ordered","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-bt-02"},{"name":"R1-BT-03","status":"Pending","level":"LEVEL 1","location":"TREATMENT ROOM 1 - 134","model":"SYMETRIX | xIO BLUETOOTH","ip":"DHCP","ipid":"","avio":"","note":"DD-BTN44 Ordered","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-bt-03"},{"name":"R1-BT1-04","status":"Pending","level":"LEVEL 1","location":"TREATMENT ROOM 2 - 135","model":"SYMETRIX | xIO BLUETOOTH","ip":"DHCP","ipid":"","avio":"","note":"DD-BTN44 Ordered","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-bt1-04"},{"name":"R2-BT-01","status":"Pending","level":"LEVEL 3","location":"LOUNGE 329","model":"SYMETRIX | xIO BLUETOOTH","ip":"DHCP","ipid":"","avio":"","note":"DD-BTN44 Ordered","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-bt-01"},{"name":"R1-DTX-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 50","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-01"},{"name":"R1-DTX-02","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 51","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-02"},{"name":"R1-DTX-03","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 52","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-03"},{"name":"R1-DTX-04","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 53","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-04"},{"name":"R1-DTX-05","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 54","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-05"},{"name":"R1-DTX-06","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 55","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-06"},{"name":"R1-DTX-07","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-384","ip":"DHCP","ipid":"IP ID: 56","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r1-dtx-07"},{"name":"R2-DTX-01","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 57","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-01"},{"name":"R2-DTX-02","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 58","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-02"},{"name":"R2-DTX-03","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 59","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-03"},{"name":"R2-DTX-04","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 5A","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-04"},{"name":"R2-DTX-05","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 5B","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-05"},{"name":"R2-DTX-06","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 5C","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-06"},{"name":"R2-DTX-07","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"DHCP","ipid":"IP ID: 5D","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-07"},{"name":"R2-DTX-08","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360","ip":"DHCP","ipid":"IP ID: 5E","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-08"},{"name":"R2-DTX-09","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360","ip":"DHCP","ipid":"IP ID: 5F","avio":"","note":"Network Port 2 \u2192 Source Audio (AES67)","ports":[],"id":"r2-dtx-09"},{"name":"R1-DTX-01","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 50","avio":"CE LAB MP90R \u2192 Card 1, HDMI 1","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-01-2"},{"name":"R1-DTX-02","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 51","avio":"OFE Cable Box 1 \u2192 HDMI 1 \u2192 Card 2","note":"Video Source?","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-02-2"},{"name":"R1-DTX-03","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 52","avio":"OFE Cable Box 2 \u2192 HDMI 1 \u2192 Card 3","note":"Video Source?","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-03-2"},{"name":"R1-DTX-04","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 53","avio":"OFE Cable Box 3 \u2192 HDMI 1 \u2192 Card 4","note":"Video Source?","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-04-2"},{"name":"R1-DTX-05","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 54","avio":"OFE Cable Box 4 \u2192 HDMI 1 \u2192 Card 5","note":"Video Source?","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-05-2"},{"name":"R1-DTX-06","status":"Pending","level":"LEVEL 1","location":"ELEC 116 | AV RACK 1","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 55","avio":"OFE Cable Box 5 \u2192 HDMI 1 \u2192 Card 6","note":"Video Source?","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-06-2"},{"name":"R1-DTX-07","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-384","ip":"","ipid":"IP ID: 56","avio":"Local Wall Plate \u2192 HDMI IN 1   AM-3100-WF \u2192 HDMI IN 2","note":"Verify design intent","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-dtx-07-2"},{"name":"R2-DTX-01","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 57","avio":"OFE \u2192 Card 1, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-01-2"},{"name":"R2-DTX-02","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 58","avio":"OFE Cable Box 6 \u2192 Card 2, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-02-2"},{"name":"R2-DTX-03","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 59","avio":"OFE Cable Box 7 \u2192 Card 3, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-03-2"},{"name":"R2-DTX-04","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 5A","avio":"OFE Cable Box 8 \u2192 Card 4, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-04-2"},{"name":"R2-DTX-05","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 5B","avio":"OFE Cable Box 9 \u2192 Card 5, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-05-2"},{"name":"R2-DTX-06","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 5C","avio":"OFE Cable Box 10 \u2192 Card 6, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-06-2"},{"name":"R2-DTX-07","status":"Pending","level":"Level 3","location":"ELEC 309 | AV RACK 2","model":"CRESTRON | DM-NVX-360C","ip":"","ipid":"IP ID: 5D","avio":"OFE Cable Box 11 \u2192 Card 7, HDMI 1","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-07-2"},{"name":"R2-DTX-08","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 5E","avio":"Local Wall Plate \u2192 HDMI IN 1              HDMI OUT 1 \u2192 ?","note":"Verify design intent","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-08-2"},{"name":"R2-DTX-09","status":"Pending","level":"LEVEL 3","location":"LOUNGE 329","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 5F","avio":"AM-3100-WF \u2192 HDMI IN 1                   HDMI OUT 1 \u2192 ?","note":"Verify design intent","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-dtx-09-2"},{"name":"R1-DRX-01","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 60","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-01"},{"name":"R1-DRX-02","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 61","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-02"},{"name":"R1-DRX-03","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 62","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-03"},{"name":"R1-DRX-04","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 63","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-04"},{"name":"R1-DRX-05","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 64","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-05"},{"name":"R1-DRX-06","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 65","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-06"},{"name":"R1-DRX-07","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 66","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-07"},{"name":"R1-DRX-08","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 67","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-08"},{"name":"R1-DRX-09","status":"Pending","level":"LEVEL 1","location":"MOVEMENT STUDIO 140","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 68","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-09"},{"name":"R1-DRX-10","status":"Pending","level":"LEVEL 1","location":"PRIVATE TRAINING 139","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 69","avio":"Local Wall Plate \u2192 HDMI IN 1               HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-10"},{"name":"R1-DRX-11","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 6A","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-11"},{"name":"R1-DRX-12","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 6B","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-12"},{"name":"R1-DRX-13","status":"Pending","level":"LEVEL 1","location":"FITNESS CENTER CLUB 138","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 6C","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-13"},{"name":"R1-DRX-14","status":"Pending","level":"LEVEL 1","location":"SPORTS ROOM 136","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 6D","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R1-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R1-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r1-drx-14"},{"name":"R2-DRX-01","status":"Pending","level":"LEVEL 3","location":"EXTERIOR","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 6E","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-01"},{"name":"R2-DRX-02","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 6F","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-02"},{"name":"R2-DRX-03","status":"Pending","level":"LEVEL 3","location":"CLUB ROOM 320","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 70","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-03"},{"name":"R2-DRX-04","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 71","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-04"},{"name":"R2-DRX-05","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 72","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-05"},{"name":"R2-DRX-06","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 73","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-06"},{"name":"R2-DRX-07","status":"Pending","level":"LEVEL 3","location":"NEWS CAFE 325","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 74","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-07"},{"name":"R2-DRX-08","status":"Pending","level":"LEVEL 3","location":"LOUNGE 329","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 75","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-08"},{"name":"R2-DRX-09","status":"Pending","level":"LEVEL 3","location":"EMPLOYEE BREAKROOM 209","model":"CRESTRON | DM-NVX-360","ip":"","ipid":"IP ID: 76","avio":"HDMI OUT 1 \u2192 TV","note":"","ports":[{"switch":"R2-SWI-01","port":null,"cable_label":null,"mode":null,"vlans":null},{"switch":"R2-SWI-02","port":null,"cable_label":null,"mode":null,"vlans":null}],"id":"r2-drx-09"}];
+
+/* Multi-project scaffold: each project keeps its own device list and its own
+   namespaced slice of the shared db (projects/<id>/checklist, projects/<id>/punch).
+   Today there's one project; adding another is: extract its Info Sheet the same
+   way, add a PROJECTS entry, republish. A project picker can go in the header
+   later without touching anything below. */
+const PROJECTS = {
+  "rcrsb": {
+    id: "rcrsb",
+    name: "Ritz-Carlton Residences, Sarasota Bay",
+    shortName: "RCRSB",
+    devices: PROJECT_DEVICES
+  }
+};
+let currentProject = Object.keys(PROJECTS)[0];
+let DEVICES = PROJECTS[currentProject].devices;
+
+const CHECKS = [
+  {key:'power', label:'Power'},
+  {key:'network', label:'Network'},
+  {key:'function', label:'Function'}
+];
+const SEVERITIES = ['minor','major','critical'];
+
+let checklist = {};   // deviceId -> {power,network,function}
+let punches = [];     // {id, deviceId, deviceName, location, description, severity, status, reportedBy, createdAt, resolvedBy, resolvedAt}
+let techName = localStorage.getItem('pd_tech_name') || '';
+let view = 'locations';
+let currentLocation = null;
+let searchQuery = '';
+let punchStatusFilter = 'open';
+let punchLocationFilter = '';
+let openPunchFormFor = null;
+let pendingSeverity = 'major';
+let punchDraftText = {};
+let syncEnabled = false;
+let pollTimer = null;
+
+const LOCATIONS = (function(){
+  const map = {};
+  DEVICES.forEach(function(d){
+    if(!map[d.location]) map[d.location] = [];
+    map[d.location].push(d);
+  });
+  return Object.keys(map).sort().map(function(name){
+    return {name: name, devices: map[name]};
+  });
+})();
+const DEVICE_BY_ID = {};
+DEVICES.forEach(function(d){ DEVICE_BY_ID[d.id] = d; });
+
+function loadCache(){
+  try{
+    const raw = localStorage.getItem('pd_commissioning_cache_' + currentProject);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      checklist = parsed.checklist || {};
+      punches = parsed.punches || [];
+    }
+  }catch(e){}
+}
+function saveCache(){
+  try{
+    localStorage.setItem('pd_commissioning_cache_' + currentProject, JSON.stringify({checklist:checklist, punches:punches}));
+  }catch(e){}
+}
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+function fmtTime(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+  }catch(e){ return ''; }
+}
+
+function getCheck(deviceId){
+  return checklist[deviceId] || {power:null, network:null, function:null};
+}
+function isTested(deviceId){
+  const c = getCheck(deviceId);
+  return c.power && c.network && c.function;
+}
+function hasFail(deviceId){
+  const c = getCheck(deviceId);
+  return c.power === 'fail' || c.network === 'fail' || c.function === 'fail';
+}
+function locationStats(devices){
+  let tested = 0, fails = 0;
+  devices.forEach(function(d){
+    if(isTested(d.id)) tested++;
+    if(hasFail(d.id)) fails++;
+  });
+  return {tested: tested, total: devices.length, fails: fails};
+}
+function openPunchCount(locationName){
+  return punches.filter(function(p){ return p.status === 'open' && (!locationName || p.location === locationName); }).length;
+}
+
+function overallStats(){
+  let tested = 0, failCount = 0;
+  DEVICES.forEach(function(d){
+    if(isTested(d.id)) tested++;
+    const c = getCheck(d.id);
+    [c.power,c.network,c.function].forEach(function(v){ if(v==='fail') failCount++; });
+  });
+  const open = punches.filter(function(p){ return p.status==='open'; }).length;
+  return {tested: tested, total: DEVICES.length, failChecks: failCount, open: open};
+}
+
+function renderStats(){
+  const s = overallStats();
+  document.getElementById('statTested').textContent = s.tested + '/' + s.total;
+  document.getElementById('statBar').style.width = (s.total? (100*s.tested/s.total):0) + '%';
+  document.getElementById('statOpen').textContent = s.open;
+  document.getElementById('statFail').textContent = s.failChecks;
+  const chip = document.getElementById('techChip');
+  chip.textContent = techName ? ('Testing as ' + techName) : 'Set your name';
+}
+
+function matchesSearch(text){
+  if(!searchQuery) return true;
+  return text.toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1;
+}
+
+function renderLocations(){
+  const q = searchQuery.trim();
+  let html = '';
+  if(!syncEnabled){
+    html += '<div class="offline-banner"><span class="dot"></span> Working solo on this device &mdash; changes will sync to the team once a connection is available.</div>';
+  }
+  // If searching, also allow jumping straight to a matching device
+  let locs = LOCATIONS;
+  if(q){
+    locs = LOCATIONS.filter(function(loc){
+      if(matchesSearch(loc.name)) return true;
+      return loc.devices.some(function(d){ return matchesSearch(d.name) || matchesSearch(d.model); });
+    });
+  }
+  html += '<div class="section-label">' + locs.length + ' location' + (locs.length===1?'':'s') + '</div>';
+  html += '<div class="loc-grid">';
+  if(locs.length===0){
+    html += '<div class="empty">No locations or devices match &ldquo;' + esc(q) + '&rdquo;.</div>';
+  }
+  locs.forEach(function(loc){
+    const st = locationStats(loc.devices);
+    const openCt = openPunchCount(loc.name);
+    const pct = st.total ? Math.round(100*st.tested/st.total) : 0;
+    html += '<button class="loc-card" data-loc="' + esc(loc.name) + '">'
+      + '<div class="name">' + esc(loc.name) + '</div>'
+      + '<div class="meta">' + loc.devices.length + ' device' + (loc.devices.length===1?'':'s') + '</div>'
+      + '<div class="bar"><span style="width:' + pct + '%;background:' + (st.fails? 'var(--fail)':'var(--pass)') + '"></span></div>'
+      + '<div class="footer">'
+      + '<span style="color:var(--ink-soft)">' + st.tested + '/' + st.total + ' tested</span>'
+      + (openCt ? ('<span class="badge open">' + openCt + ' open</span>') : (st.tested===st.total ? '<span class="badge done">done</span>' : ''))
+      + '</div>'
+      + '</button>';
+  });
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+function titleCase(s){
+  return s.replace(/\w\S*/g, function(t){ return t.charAt(0).toUpperCase() + t.substr(1).toLowerCase(); });
+}
+
+function portSummary(dev){
+  const withPort = (dev.ports||[]).filter(function(p){ return p.port || p.cable_label; });
+  const list = withPort.length ? withPort : (dev.ports||[]);
+  if(!list.length) return '';
+  return list.map(function(p){
+    let s = p.switch || '';
+    if(p.port) s += ' / Port ' + p.port; else s += ' / port TBD';
+    return s;
+  }).join(', ');
+}
+
+function renderLocationDetail(){
+  const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
+  if(!loc){ view='locations'; renderContent(); return; }
+  const st = locationStats(loc.devices);
+  let devices = loc.devices;
+  if(searchQuery.trim()){
+    devices = devices.filter(function(d){ return matchesSearch(d.name) || matchesSearch(d.model); });
+  }
+  let html = '';
+  html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
+  html += '<div class="loc-header"><h2>' + esc(loc.name) + '</h2>'
+    + '<div class="meta">' + loc.devices.length + ' devices &middot; ' + st.tested + '/' + st.total + ' tested'
+    + (st.fails ? (' &middot; <span style="color:var(--fail);font-weight:700">' + st.fails + ' failed</span>') : '')
+    + '</div></div>';
+  html += '<div class="device-list">';
+  devices.forEach(function(d){ html += deviceCardHtml(d); });
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
+
+function deviceCardHtml(d){
+  const c = getCheck(d.id);
+  const ports = portSummary(d);
+  let html = '<div class="device-card" data-device="' + esc(d.id) + '">';
+  html += '<div class="device-top"><div>'
+    + '<div class="device-name">' + esc(d.name) + '</div>'
+    + '<div class="device-model">' + esc(d.model || 'Model not specified') + '</div>'
+    + '</div></div>';
+  html += '<div class="device-data mono">';
+  if(d.ip) html += '<span>IP <b>' + esc(d.ip) + '</b></span>';
+  if(d.ipid) html += '<span>' + esc(d.ipid) + '</span>';
+  if(ports) html += '<span>' + esc(ports) + '</span>';
+  html += '</div>';
+  if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
+  if(d.note) html += '<div class="device-note">' + esc(d.note) + '</div>';
+  html += '<div class="check-row">';
+  CHECKS.forEach(function(chk){
+    const v = c[chk.key];
+    const cls = v==='pass' ? 'pass' : (v==='fail' ? 'fail' : '');
+    const state = v==='pass' ? 'Pass' : (v==='fail' ? 'Fail' : 'Untested');
+    html += '<button class="check-pill ' + cls + '" data-device="' + esc(d.id) + '" data-check="' + chk.key + '">'
+      + '<span class="k">' + chk.label + '</span>' + state + '</button>';
+  });
+  html += '</div>';
+  const devicePunches = punches.filter(function(p){ return p.deviceId === d.id; });
+  if(devicePunches.length){
+    html += '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">';
+    devicePunches.forEach(function(p){
+      html += '<div style="font-size:11.5px;display:flex;justify-content:space-between;gap:6px;align-items:center;background:'
+        + (p.status==='open'?'var(--open-bg)':'var(--pass-bg)') + ';border-radius:7px;padding:5px 8px;">'
+        + '<span style="color:' + (p.status==='open'?'var(--open)':'var(--pass)') + ';font-weight:600;">' + esc(p.description) + '</span>'
+        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '" style="padding:3px 9px;font-size:10.5px;">' + (p.status==='open'?'Open':'Resolved') + '</button>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+  if(openPunchFormFor === d.id){
+    html += '<div class="punch-form">'
+      + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
+      + '<div class="sev-row">'
+      + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+      + '</div>'
+      + '<div class="form-actions">'
+      + '<button class="btn ghost" id="cancelPunch">Cancel</button>'
+      + '<button class="btn primary" id="submitPunch" data-device="' + esc(d.id) + '">Log punch item</button>'
+      + '</div></div>';
+  } else {
+    html += '<button class="punch-add-btn" data-device="' + esc(d.id) + '">+ Add punch item</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderPunchList(){
+  let list = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+  if(punchStatusFilter !== 'all') list = list.filter(function(p){ return p.status === punchStatusFilter; });
+  if(punchLocationFilter) list = list.filter(function(p){ return p.location === punchLocationFilter; });
+  if(searchQuery.trim()) list = list.filter(function(p){ return matchesSearch(p.description) || matchesSearch(p.deviceName) || matchesSearch(p.location); });
+
+  let html = '<div class="punch-toolbar">';
+  ['open','resolved','all'].forEach(function(f){
+    html += '<button class="chip' + (punchStatusFilter===f?' active':'') + '" data-pfilter="' + f + '">' + f.charAt(0).toUpperCase()+f.slice(1) + '</button>';
+  });
+  html += '<select id="punchLocFilter"><option value="">All locations</option>';
+  LOCATIONS.forEach(function(l){
+    html += '<option value="' + esc(l.name) + '"' + (punchLocationFilter===l.name?' selected':'') + '>' + esc(l.name) + '</option>';
+  });
+  html += '</select>';
+  html += '<button class="export-btn" id="exportCsv">Export CSV</button>';
+  html += '</div>';
+
+  if(!list.length){
+    html += '<div class="empty">No punch items here yet.</div>';
+  } else {
+    list.forEach(function(p){
+      html += '<div class="punch-item">'
+        + '<div class="sev-stripe ' + (p.severity||'minor') + '"></div>'
+        + '<div class="punch-body">'
+        + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
+        + '<div class="desc">' + esc(p.description) + '</div>'
+        + '<div class="meta"><span>' + (p.severity||'minor').toUpperCase() + '</span>'
+        + (p.reportedBy ? ('<span>Reported by ' + esc(p.reportedBy) + '</span>') : '')
+        + '<span>' + fmtTime(p.createdAt) + '</span></div>'
+        + '</div>'
+        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?'Mark resolved':'Resolved') + '</button>'
+        + '</div>';
+    });
+  }
+  document.getElementById('content').innerHTML = html;
+}
+
+function renderContent(){
+  if(view === 'locations') renderLocations();
+  else if(view === 'location-detail') renderLocationDetail();
+  else renderPunchList();
+  renderStats();
+}
+
+// ---------- sync layer (Cloudflare Worker -> Turso) ----------
+// The Worker is the only thing that holds real database credentials.
+// This page only ever calls a handful of narrow, whitelisted endpoints —
+// it never sends raw SQL. See /worker/index.js and README.md.
+
+function syncConfigured(){
+  return SYNC_API_BASE && SYNC_API_BASE.indexOf('REPLACE-WITH') === -1;
+}
+
+async function apiCall(path, options){
+  const res = await fetch(SYNC_API_BASE.replace(/\/$/, '') + path, Object.assign({
+    headers: {'Content-Type': 'application/json'}
+  }, options));
+  if(!res.ok){
+    const text = await res.text().catch(function(){ return ''; });
+    throw new Error('API ' + path + ' failed (' + res.status + '): ' + text);
+  }
+  return res.json();
+}
+
+async function fetchRemoteState(){
+  return apiCall('/api/state?project=' + encodeURIComponent(currentProject), {method: 'GET'});
+}
+
+async function pushCheck(deviceId, key, value){
+  return apiCall('/api/check', {
+    method: 'POST',
+    body: JSON.stringify({
+      project: currentProject, deviceId: deviceId, key: key, value: value,
+      updatedBy: techName || 'Unnamed tech'
+    })
+  });
+}
+
+async function pushPunch(item){
+  return apiCall('/api/punch', {
+    method: 'POST',
+    body: JSON.stringify({
+      project: currentProject, deviceId: item.deviceId, deviceName: item.deviceName,
+      location: item.location, description: item.description, severity: item.severity,
+      reportedBy: item.reportedBy
+    })
+  });
+}
+
+async function pushToggleResolve(punchId, actorName){
+  return apiCall('/api/punch/toggle', {
+    method: 'POST',
+    body: JSON.stringify({project: currentProject, id: punchId, actorName: actorName})
+  });
+}
+
+async function syncFromRemote(){
+  if(!syncConfigured()) return;
+  try{
+    const remote = await fetchRemoteState();
+    checklist = remote.checklist || {};
+    const remoteIds = {};
+    (remote.punches || []).forEach(function(p){ remoteIds[p.id] = true; });
+    const stillLocal = punches.filter(function(p){ return String(p.id).indexOf('local-') === 0 && !remoteIds[p.id]; });
+    punches = (remote.punches || []).concat(stillLocal);
+    syncEnabled = true;
+    saveCache();
+    renderContent();
+  }catch(e){
+    console.error(e);
+    syncEnabled = false;
+    renderStats();
+  }
+}
+
+// ---------- writes ----------
+function persistChecklist(deviceId){
+  saveCache();
+}
+function toggleCheck(deviceId, key){
+  const cur = getCheck(deviceId);
+  const next = Object.assign({}, cur);
+  next[key] = (cur[key] === null || cur[key] === undefined) ? 'pass' : (cur[key] === 'pass' ? 'fail' : null);
+  checklist[deviceId] = next;
+  persistChecklist(deviceId);
+  renderContent();
+  if(syncConfigured()){
+    pushCheck(deviceId, key, next[key]).catch(function(e){ console.error(e); /* will reconcile on next poll */ });
+  }
+}
+function submitPunch(deviceId){
+  const dev = DEVICE_BY_ID[deviceId];
+  const desc = (punchDraftText[deviceId] || document.getElementById('punchDesc').value || '').trim();
+  if(!desc) return;
+  const tempId = 'local-' + Date.now();
+  const item = {
+    id: tempId, deviceId: deviceId, deviceName: dev.name, location: dev.location,
+    description: desc, severity: pendingSeverity, status: 'open',
+    reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
+  };
+  punches.push(item);
+  openPunchFormFor = null;
+  delete punchDraftText[deviceId];
+  saveCache();
+  renderContent();
+  if(syncConfigured()){
+    pushPunch(item).then(function(res){
+      item.id = res.id;
+      saveCache();
+    }).catch(function(e){ console.error(e); /* stays local-only; flushPendingPunches retries */ });
+  }
+}
+function toggleResolve(punchId){
+  const p = punches.find(function(x){ return x.id === punchId; });
+  if(!p) return;
+  p.status = p.status === 'open' ? 'resolved' : 'open';
+  if(p.status === 'resolved'){ p.resolvedBy = techName || 'Unnamed tech'; p.resolvedAt = new Date().toISOString(); }
+  else { delete p.resolvedBy; delete p.resolvedAt; }
+  saveCache();
+  renderContent();
+  if(syncConfigured() && String(p.id).indexOf('local-') !== 0){
+    pushToggleResolve(p.id, techName || 'Unnamed tech').catch(function(e){ console.error(e); });
+  }
+}
+
+// ---------- CSV export ----------
+function csvEscape(v){
+  const s = String(v==null?'':v);
+  if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+async function exportCsv(){
+  let list = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
+  const rows = [['Location','Device','Description','Severity','Status','Reported By','Created','Resolved By','Resolved At']];
+  list.forEach(function(p){
+    rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.status, p.reportedBy||'', p.createdAt||'', p.resolvedBy||'', p.resolvedAt||'']);
+  });
+  const csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
+  try{
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rcrsb-punch-list.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }catch(e){
+    console.error(e);
+    alert('Could not export right now. Please try again.');
+  }
+}
+
+function flushPendingPunches(){
+  if(!syncConfigured()) return;
+  punches.filter(function(p){ return String(p.id).indexOf('local-') === 0; }).forEach(function(item){
+    pushPunch(item).then(function(res){
+      item.id = res.id;
+      saveCache();
+      renderContent();
+    }).catch(function(){ /* still offline-ish, will retry on next interval */ });
+  });
+}
+setInterval(flushPendingPunches, 20000);
+
+// ---------- events ----------
+document.getElementById('content').addEventListener('click', function(e){
+  const locCard = e.target.closest('[data-loc]');
+  if(locCard){ currentLocation = locCard.getAttribute('data-loc'); view = 'location-detail'; searchQuery=''; document.getElementById('searchInput').value=''; renderContent(); return; }
+
+  const backBtn = e.target.closest('#backBtn');
+  if(backBtn){ view = 'locations'; renderContent(); return; }
+
+  const checkPill = e.target.closest('.check-pill');
+  if(checkPill){ toggleCheck(checkPill.getAttribute('data-device'), checkPill.getAttribute('data-check')); return; }
+
+  const addBtn = e.target.closest('.punch-add-btn');
+  if(addBtn){ openPunchFormFor = addBtn.getAttribute('data-device'); pendingSeverity='major'; renderContent();
+    setTimeout(function(){ const ta = document.getElementById('punchDesc'); if(ta) ta.focus(); }, 0); return; }
+
+  const cancelBtn = e.target.closest('#cancelPunch');
+  if(cancelBtn){ delete punchDraftText[openPunchFormFor]; openPunchFormFor = null; renderContent(); return; }
+
+  const sevBtn = e.target.closest('.sev-btn');
+  if(sevBtn){
+    pendingSeverity = sevBtn.getAttribute('data-sev');
+    renderContent();
+    const ta = document.getElementById('punchDesc');
+    if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
+    return;
+  }
+
+  const submitBtn = e.target.closest('#submitPunch');
+  if(submitBtn){ submitPunch(submitBtn.getAttribute('data-device')); return; }
+
+  const statusBtn = e.target.closest('.status-btn');
+  if(statusBtn){ toggleResolve(statusBtn.getAttribute('data-punch')); return; }
+
+  const pfilter = e.target.closest('[data-pfilter]');
+  if(pfilter){ punchStatusFilter = pfilter.getAttribute('data-pfilter'); renderContent(); return; }
+
+  const exportBtn = e.target.closest('#exportCsv');
+  if(exportBtn){ exportCsv(); return; }
+});
+document.getElementById('content').addEventListener('change', function(e){
+  if(e.target.id === 'punchLocFilter'){ punchLocationFilter = e.target.value; renderContent(); }
+});
+document.getElementById('content').addEventListener('input', function(e){
+  if(e.target.id === 'punchDesc' && openPunchFormFor){ punchDraftText[openPunchFormFor] = e.target.value; }
+});
+
+document.getElementById('searchInput').addEventListener('input', function(e){
+  searchQuery = e.target.value;
+  if(view === 'location-detail') renderLocationDetail(); else if(view==='locations') renderLocations(); else renderPunchList();
+});
+document.getElementById('tabLocations').addEventListener('click', function(){
+  view='locations'; currentLocation=null;
+  document.getElementById('tabLocations').classList.add('active');
+  document.getElementById('tabPunch').classList.remove('active');
+  renderContent();
+});
+document.getElementById('tabPunch').addEventListener('click', function(){
+  view='punch';
+  document.getElementById('tabPunch').classList.add('active');
+  document.getElementById('tabLocations').classList.remove('active');
+  renderContent();
+});
+document.getElementById('techChip').addEventListener('click', function(){
+  const name = prompt('Your name (shown on checklist updates and punch items):', techName || '');
+  if(name !== null){
+    techName = name.trim();
+    localStorage.setItem('pd_tech_name', techName);
+    renderStats();
+  }
+});
+
+// ---------- boot ----------
+(function(){
+  const proj = PROJECTS[currentProject];
+  document.getElementById('projSub').textContent = proj.shortName + ' · ' + proj.name;
+})();
+loadCache();
+renderContent();
+
+// Real-time push (onSnapshot) isn't available with this backend, so instead
+// we do an immediate sync on load, then poll on an interval. Every write
+// still applies to the local copy immediately (optimistic UI) before the
+// network call goes out, so the app feels instant even on a slow connection.
+if(syncConfigured()){
+  syncFromRemote();
+  pollTimer = setInterval(syncFromRemote, SYNC_POLL_MS);
+} else {
+  console.warn('SYNC_API_BASE is not configured — running in local-only (single device) mode. See README.md.');
+}
+</script>
+
+</body></html>
