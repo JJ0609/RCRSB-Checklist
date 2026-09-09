@@ -112,6 +112,19 @@ img{max-width:100%}
   --topbar-fail:#FF8CA0;
 }
 
+/* Logo swap: black mark for light backgrounds, white mark for dark —
+   same three-block pattern as the color tokens above (default light,
+   system dark preference, explicit override), so it stays in sync with
+   whichever theme is actually active. */
+.logo-mark{height:22px;display:block;}
+.logo-for-dark{display:none;}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .logo-for-light{display:none;}
+  :root:not([data-theme="light"]) .logo-for-dark{display:block;}
+}
+:root[data-theme="dark"] .logo-for-light{display:none;}
+:root[data-theme="dark"] .logo-for-dark{display:block;}
+
 *{box-sizing:border-box;}
 body{
   background:var(--bg);
@@ -145,7 +158,6 @@ a{color:inherit;}
   box-shadow:var(--shadow);
 }
 .topbar-row{display:flex;align-items:center;gap:12px;}
-.topbar-row img{height:22px;width:auto;display:block;flex:none;}
 .topbar-titles{flex:1;min-width:0;}
 .topbar-titles .proj{
   font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:16px;line-height:1.2;
