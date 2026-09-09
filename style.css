@@ -142,7 +142,7 @@ h1,h2,h3,.display{
   font-family:'JetBrains Mono',ui-monospace,monospace;
   font-variant-numeric:tabular-nums;
 }
-button{font-family:inherit;}
+button{font-family:inherit;color:inherit;}
 a{color:inherit;}
 ::selection{background:var(--accent);color:var(--accent-ink);}
 :focus-visible{outline:none;box-shadow:var(--focus);border-radius:6px;}
