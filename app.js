@@ -399,6 +399,17 @@ async function pushToggleResolve(punchId, actorName){
   });
 }
 
+// While someone is actively typing a punch description, a background
+// re-render would tear down and rebuild that textarea's DOM node,
+// silently kicking focus out of it every poll cycle (every 5 seconds).
+// Skip the render in that case — the underlying data still updates
+// (nothing is lost), the visible screen just catches up next time the
+// person does something that naturally re-renders (submit, cancel,
+// toggle a check, switch tabs).
+function isComposingPunch(){
+  return document.activeElement && document.activeElement.id === 'punchDesc';
+}
+
 async function syncFromRemote(){
   if(!syncConfigured()) return;
   try{
@@ -410,7 +421,11 @@ async function syncFromRemote(){
     punches = (remote.punches || []).concat(stillLocal);
     syncEnabled = true;
     saveCache();
-    renderContent();
+    if(isComposingPunch()){
+      renderStats();
+    }else{
+      renderContent();
+    }
   }catch(e){
     console.error(e);
     syncEnabled = false;
@@ -696,7 +711,7 @@ function flushPendingPunches(){
     pushPunch(item).then(function(res){
       item.id = res.id;
       saveCache();
-      renderContent();
+      if(isComposingPunch()) renderStats(); else renderContent();
     }).catch(function(){ /* still offline-ish, will retry on next interval */ });
   });
 }
