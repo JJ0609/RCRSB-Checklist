@@ -161,8 +161,10 @@ document.getElementById('projectList').addEventListener('change', async function
       'Import results for "' + id + '" from ' + file.name + '?\n\n' +
       'This must be a "Device Report" exported from this app (or an edited copy of one). ' +
       'Every field it contains — Location, Device Name, Model, IP, IP ID, AV I/O, Note, ' +
-      'and Power/Network/Function — will OVERWRITE the current values for matching devices. ' +
-      'If this file is older than the live data, re-uploading it can revert newer changes.'
+      'Power/Network/Function, and the Punch List sheet — will OVERWRITE the current values ' +
+      'for matching rows (matched by Device ID / Punch ID, not by name). New rows with a blank ' +
+      'Punch ID are created as new punch items. If this file is older than the live data, ' +
+      're-uploading it can revert newer changes.'
     )){
       importInput.value = '';
       return;
@@ -176,13 +178,16 @@ document.getElementById('projectList').addEventListener('change', async function
       const workbook = XLSX.read(buf, {type: 'array'});
       const rows = parseDeviceReportForSync(workbook);
       const punchRows = parsePunchListForSync(workbook);
-      if(statusEl) statusEl.textContent = 'Uploading ' + rows.length +
-      ' device rows and ' + punchRows.length + ' punch rows…';
+      if(statusEl) statusEl.textContent = 'Uploading ' + rows.length + ' device rows and ' + punchRows.length + ' punch rows…';
       const result = await adminFetch('/api/admin/projects/import-results', {
         method: 'POST',
         body: JSON.stringify({id: id, rows: rows, punches: punchRows})
       });
-      if(statusEl) statusEl.textContent = 'Synced ' + result.devicesUpdated + ' device field' + (result.devicesUpdated===1?'':'s') + ' and ' + result.checklistUpdated + ' checklist row' + (result.checklistUpdated===1?'':'s') + '.';
+      if(statusEl) statusEl.textContent =
+        'Synced ' + result.devicesUpdated + ' device field' + (result.devicesUpdated===1?'':'s') +
+        ', ' + result.checklistUpdated + ' checklist row' + (result.checklistUpdated===1?'':'s') +
+        ', ' + result.punchesUpdated + ' punch update' + (result.punchesUpdated===1?'':'s') +
+        ', ' + result.punchesCreated + ' new punch item' + (result.punchesCreated===1?'':'s') + '.';
       loadProjectList();
     }catch(e){
       console.error(e);
@@ -343,18 +348,18 @@ function parseDeviceReportForSync(workbook){
 // Parses the "Punch List" sheet from the same exported Device Report file.
 // Same header-matching approach as parseDeviceReportForSync. A row with
 // "Punch ID" filled in updates that existing item; a row with a blank
-// Punch ID but a valid Device ID is a brand-new item soomeone typed by hand
-// and it gets created on import. This sheet is optional, if it's missing or
-// can't be parsed, the caller just gets an empty array back so the Device
-//Report sync can sill procees on its own.
+// Punch ID but a valid Device ID is a brand-new item someone typed by
+// hand — it gets created on import. This sheet is optional: if it's
+// missing or can't be parsed, the caller just gets an empty array back
+// so the Device Report sync can still proceed on its own.
 function parsePunchListForSync(workbook){
-  const sheetName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'punch list'});
-  if (!sheetName) return [];
+  const sheetName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'punch list'; });
+  if(!sheetName) return [];
   const ws = workbook.Sheets[sheetName];
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
 
   let headerRow = null, cols = {};
-  for(let r = range.s; r <= Math.min(range.e.r, range.s.r + 15); r++){
+  for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 15); r++){
     const found = {};
     for(let c = range.s.c; c <= range.e.c; c++){
       const cell = ws[XLSX.utils.encode_cell({r, c})];
@@ -386,7 +391,7 @@ function parsePunchListForSync(workbook){
     const id = cellStr(r, cols.punchId);
     const deviceId = cellStr(r, cols.deviceId);
     const description = cellStr(r, cols.description);
-    if(!id && !deviceId && !description) continue; //blank trailing row
+    if(!id && !deviceId && !description) continue; // blank trailing row
     punches.push({
       id: id,
       deviceId: deviceId,
@@ -397,7 +402,7 @@ function parsePunchListForSync(workbook){
       status: cellStr(r, cols.status),
       reportedBy: cellStr(r, cols.reportedBy),
       resolvedBy: cellStr(r, cols.resolvedBy),
-      resolvedAt: cellStr(r, cols.resolvedAt),
+      resolvedAt: cellStr(r, cols.resolvedAt)
     });
   }
   return punches;
