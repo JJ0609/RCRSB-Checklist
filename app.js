@@ -497,28 +497,27 @@ async function exportCsv(){
   }
 }
 
-// ---------- device report export ----------
+// ---------- device report export (updated Info Sheet, styled .xlsx) ----------
 const XL_COLORS = {
   POWER_RED: 'FFC8102E', BLACK: 'FF000000', WHITE: 'FFFFFFFF', STEEL: 'FFE6E6E6',
   GRAVEL_BG: 'FFEDEDED', GRAVEL_TXT: 'FF53565A',
   PASS_BG: 'FFDCEFE1', PASS_TXT: 'FF1F7A4D',
   FAIL_BG: 'FFF9DADF', FAIL_TXT: 'FFC8102E',
-  OPEN_BG: 'FFCEEDD', OPEN_TXT: 'FFB5620A',
+  OPEN_BG: 'FFFCEEDD', OPEN_TXT: 'FFB5620A',
   RESOLVED_BG: 'FFDCEFE1', RESOLVED_TXT: 'FF1F7A4D',
   MINOR_BG: 'FFEDEDED', MINOR_TXT: 'FF53565A',
   MAJOR_BG: 'FFFCEEDD', MAJOR_TXT: 'FFB5620A',
-  CRITICAL_BG: 'FFF9DADF', CRITICAL_TXT: 'FFC810E',
+  CRITICAL_BG: 'FFF9DADF', CRITICAL_TXT: 'FFC8102E'
 };
-function xlFill(argb){return {type:'pattern', pattern:'solid', fgColor:{argb:argb}}; }
+function xlFill(argb){ return {type:'pattern', pattern:'solid', fgColor:{argb: argb}}; }
 function checkCellStyle(v){
-  if (v === 'pass') return {label:'Pass', bg: XL_COLORS.PASS_BG, txt: XL_COLORS.PASS_TXT};
-  if (v === 'fail') return {label:'Fail', bg: XL_COLORS.FAIL_BG, txt: XL_COLORS.FAIL_TXT};
-  return {label: 'Untested', bg: XL_COLORS.GRAVEL_BG, txt: XL_COLORS.GRAVEL_TXT};
+  if(v === 'pass') return {label:'Pass', bg: XL_COLORS.PASS_BG, txt: XL_COLORS.PASS_TXT};
+  if(v === 'fail') return {label:'Fail', bg: XL_COLORS.FAIL_BG, txt: XL_COLORS.FAIL_TXT};
+  return {label:'Untested', bg: XL_COLORS.GRAVEL_BG, txt: XL_COLORS.GRAVEL_TXT};
 }
-
 function severityCellStyle(sev){
-  if (sev === 'critical') return {bg: XL_COLORS.CRITICAL_BG, txt: XL_COLORS.CRITICAL_TXT};
-  if (sev === 'major') return {bg: XL_COLORS.MAJOR_BG, txt: XL_COLORS.MAJOR_TXT};
+  if(sev === 'critical') return {bg: XL_COLORS.CRITICAL_BG, txt: XL_COLORS.CRITICAL_TXT};
+  if(sev === 'major') return {bg: XL_COLORS.MAJOR_BG, txt: XL_COLORS.MAJOR_TXT};
   return {bg: XL_COLORS.MINOR_BG, txt: XL_COLORS.MINOR_TXT};
 }
 function statusCellStyle(status){
@@ -527,7 +526,7 @@ function statusCellStyle(status){
     : {bg: XL_COLORS.OPEN_BG, txt: XL_COLORS.OPEN_TXT};
 }
 function styleHeaderRow(row, count){
-  for (let i = 1; i <= count; i++){
+  for(let i = 1; i <= count; i++){
     const c = row.getCell(i);
     c.font = {name:'Arial', size:12, bold:true, color:{argb: XL_COLORS.WHITE}};
     c.fill = xlFill(XL_COLORS.BLACK);
@@ -535,35 +534,38 @@ function styleHeaderRow(row, count){
   }
   row.height = 22;
 }
-function santitizeFilenamePart(s){
-  return String(s || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, '').replace(/\s+,/g, ',').trim();
+function sanitizeFilenamePart(s){
+  return String(s || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
 }
 
 async function exportDeviceReport(){
   if(typeof ExcelJS === 'undefined'){
-    alert('The Excel export library didn\'t load - check your connection and reload the page.');
+    alert('The Excel export library didn\'t load — check your connection and reload the page.');
     return;
   }
   const btn = document.getElementById('exportReportBtn');
   const originalLabel = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Building...';
+  btn.textContent = 'Building…';
 
   try{
     const wb = new ExcelJS.Workbook();
     const projectDisplayName = currentProjectMeta.name || currentProject;
 
-    // ----Sheet 1: Device Report ----
+    // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:J1');
+    ws.mergeCells('A1:K1');
     const title = ws.getCell('A1');
-    title.value = projectDisplayName + ' - Device Report';
-    title.font = {name:'Arial', size:18, bold:true, color:{argb:XL_COLORS.POWER_RED}};
+    title.value = projectDisplayName + ' — Device Report';
+    title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
     ws.getRow(1).height = 32;
 
-    const deviceHeaders = ['Location','Device Name', 'Manufacturer | Model', 'IP Address', 'IP ID', 'AV I/O', 'Power', 'Network', 'Function', 'Note'];
+    // "Device ID" is the stable join key for re-importing this file later
+    // (see importChecklistResults) — device Name alone isn't reliable
+    // since some projects reuse the same name across different rooms.
+    const deviceHeaders = ['Device ID','Location','Device Name','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Note'];
     const deviceHeaderRow = ws.getRow(3);
-    deviceHeaders.forEach(function(h, i){deviceHeaderRow.getCell(i + 1).value = h;});
+    deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
 
     const sortedDevices = DEVICES.slice().sort(function(a,b){
@@ -575,50 +577,54 @@ async function exportDeviceReport(){
     sortedDevices.forEach(function(d, idx){
       const c = getCheck(d.id);
       const row = ws.getRow(r);
-      const band =(idx % 2 === 1) ? XL_COLORS.STEEL : XL_COLORS.WHITE;
+      const band = (idx % 2 === 1) ? XL_COLORS.STEEL : XL_COLORS.WHITE;
+      const idCell = row.getCell(1);
+      idCell.value = d.id;
+      idCell.fill = xlFill(band);
+      idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
       const plainVals = [d.location, d.name, d.model, d.ip, d.ipid, d.avio];
       plainVals.forEach(function(v, i){
-        const cell = row.getCell(i+1);
+        const cell = row.getCell(i+2);
         cell.value = v || '';
         cell.fill = xlFill(band);
       });
       [c.power, c.network, c.function].forEach(function(v, i){
         const st = checkCellStyle(v);
-        const cell = row.getCell(7+i);
+        const cell = row.getCell(8+i);
         cell.value = st.label;
         cell.fill = xlFill(st.bg);
         cell.font = {bold:true, color:{argb: st.txt}};
       });
-      const noteCell = row.getCell(10);
+      const noteCell = row.getCell(11);
       noteCell.value = d.note || '';
       noteCell.fill = xlFill(band);
       r++;
     });
 
-    ws.columns = [{width:26},{width:20},{width:26},{width:15},{width:22},{width:20},{width:11},{width:11},{width:11},{width:30}];
+    ws.columns = [{width:20},{width:26},{width:20},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:30}];
     ws.views = [{state:'frozen', ySplit:3}];
 
-    // ----Sheet 2: Punch List ----
+    // ---- Sheet 2: Punch List ----
     const pl = wb.addWorksheet('Punch List');
     pl.mergeCells('A1:I1');
     const plTitle = pl.getCell('A1');
-    plTitle.value = projectDisplayName + ' - Punch List';
-    plTitle.font = {name:'Arial', size:18, bold:true, color:{argb:XL_COLORS.POWER_RED}};
+    plTitle.value = projectDisplayName + ' — Punch List';
+    plTitle.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
     pl.getRow(1).height = 32;
 
-    const punchHeaders = ['Location', 'Device Name', 'Description', 'Severity', 'Status', 'Reported By', 'Created', 'Resolved By', 'Resolved At'];
+    const punchHeaders = ['Location','Device Name','Description','Severity','Status','Reported By','Created','Resolved By','Resolved At'];
     const punchHeaderRow = pl.getRow(3);
-    punchHeaders.forEach(function(h, i){punchHeaderRow.getCell(i+1).value = h;});
+    punchHeaders.forEach(function(h, i){ punchHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(punchHeaderRow, punchHeaders.length);
 
-    const sortedPunches = punches.slice().sort(function(a,b){ return(b.createdAt||'').localeCompare(a.createdAt||'');});
+    const sortedPunches = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
 
     let pr = 4;
     sortedPunches.forEach(function(p, idx){
       const row = pl.getRow(pr);
       const band = (idx % 2 === 1) ? XL_COLORS.STEEL : XL_COLORS.WHITE;
       const plainVals = [p.location || '', p.deviceName || '', p.description || ''];
-      plainVals.forEach(function(v,i){
+      plainVals.forEach(function(v, i){
         const cell = row.getCell(i+1);
         cell.value = v;
         cell.fill = xlFill(band);
@@ -635,7 +641,8 @@ async function exportDeviceReport(){
       statCell.fill = xlFill(statStyle.bg);
       statCell.font = {bold:true, color:{argb: statStyle.txt}};
 
-      const tailVals =[p.reportedBy || '', p.createdAt || '', p.resolvedBy || '', p.resolvedAt || ''];
+      // reportedBy: the tech who submitted this punch item
+      const tailVals = [p.reportedBy || '', p.createdAt || '', p.resolvedBy || '', p.resolvedAt || ''];
       tailVals.forEach(function(v, i){
         const cell = row.getCell(6+i);
         cell.value = v;
@@ -645,13 +652,13 @@ async function exportDeviceReport(){
     });
 
     pl.columns = [{width:22},{width:18},{width:38},{width:11},{width:11},{width:16},{width:19},{width:16},{width:19}];
-    pl.views = [{state: 'frozen', ySplit:3}];
+    pl.views = [{state:'frozen', ySplit:3}];
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
     const dateStr = new Date().toISOString().slice(0,10);
-    const filename = santitizeFilenamePart(projectDisplayName) + '_InfoSheet_' + dateStr + '.xlsx';
+    const filename = sanitizeFilenamePart(projectDisplayName) + '_InfoSheet_' + dateStr + '.xlsx';
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -663,7 +670,7 @@ async function exportDeviceReport(){
     console.error(e);
     alert('Could not build the export right now. Please try again.');
   }finally{
-    btn.disabled = false
+    btn.disabled = false;
     btn.textContent = originalLabel;
   }
 }

@@ -97,8 +97,15 @@ async function loadProjectList(){
     el.innerHTML = projects.map(function(p){
       return '<div class="admin-row">'
         + '<div><div class="name">' + esc(p.name) + '</div>'
-        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + '</div></div>'
+        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + '</div>'
+        + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
+        + '<div style="display:flex;gap:8px;flex:none;">'
+        + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
+        + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
+        + '<button class="btn" data-update="' + esc(p.id) + '">Update Devices</button>'
+        + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
         + '<button class="btn" data-delete="' + esc(p.id) + '" style="border-color:var(--fail);color:var(--fail);">Delete</button>'
+        + '</div>'
         + '</div>';
     }).join('');
   }catch(e){
@@ -107,19 +114,126 @@ async function loadProjectList(){
 }
 
 document.getElementById('projectList').addEventListener('click', async function(e){
-  const btn = e.target.closest('[data-delete]');
-  if(!btn) return;
-  const id = btn.getAttribute('data-delete');
-  if(!confirm('Delete project "' + id + '"? This permanently removes its device list, checklist, and punch list. This can\'t be undone.')) return;
+  const delBtn = e.target.closest('[data-delete]');
+  if(delBtn){
+    const id = delBtn.getAttribute('data-delete');
+    if(!confirm('Delete project "' + id + '"? This permanently removes its device list, checklist, and punch list. This can\'t be undone.')) return;
+    delBtn.disabled = true;
+    delBtn.textContent = 'Deleting…';
+    try{
+      await adminFetch('/api/admin/projects/delete', {method: 'POST', body: JSON.stringify({id: id})});
+      loadProjectList();
+    }catch(e){
+      alert('Could not delete: ' + e.message);
+      delBtn.disabled = false;
+      delBtn.textContent = 'Delete';
+    }
+    return;
+  }
+
+  const updateBtn = e.target.closest('[data-update]');
+  if(updateBtn){
+    const id = updateBtn.getAttribute('data-update');
+    const fileInput = document.querySelector('[data-update-file="' + CSS.escape(id) + '"]');
+    if(fileInput) fileInput.click();
+    return;
+  }
+
+  const importBtn = e.target.closest('[data-import]');
+  if(importBtn){
+    const id = importBtn.getAttribute('data-import');
+    const fileInput = document.querySelector('[data-import-file="' + CSS.escape(id) + '"]');
+    if(fileInput) fileInput.click();
+    return;
+  }
+});
+
+document.getElementById('projectList').addEventListener('change', async function(e){
+  const importInput = e.target.closest('[data-import-file]');
+  if(importInput){
+    const id = importInput.getAttribute('data-import-file');
+    const file = importInput.files[0];
+    const statusEl = document.querySelector('[data-status-for="' + CSS.escape(id) + '"]');
+    const btn = document.querySelector('[data-import="' + CSS.escape(id) + '"]');
+    if(!file) return;
+
+    if(!confirm(
+      'Import results for "' + id + '" from ' + file.name + '?\n\n' +
+      'This must be a "Device Report" exported from this app (or an edited copy of one). ' +
+      'Every field it contains — Location, Device Name, Model, IP, IP ID, AV I/O, Note, ' +
+      'and Power/Network/Function — will OVERWRITE the current values for matching devices. ' +
+      'If this file is older than the live data, re-uploading it can revert newer changes.'
+    )){
+      importInput.value = '';
+      return;
+    }
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    if(statusEl) statusEl.textContent = 'Reading file…';
+    try{
+      const buf = await file.arrayBuffer();
+      const workbook = XLSX.read(buf, {type: 'array'});
+      const rows = parseDeviceReportForSync(workbook);
+      if(statusEl) statusEl.textContent = 'Uploading ' + rows.length + ' rows…';
+      const result = await adminFetch('/api/admin/projects/import-results', {
+        method: 'POST',
+        body: JSON.stringify({id: id, rows: rows})
+      });
+      if(statusEl) statusEl.textContent = 'Synced ' + result.devicesUpdated + ' device field' + (result.devicesUpdated===1?'':'s') + ' and ' + result.checklistUpdated + ' checklist row' + (result.checklistUpdated===1?'':'s') + '.';
+      loadProjectList();
+    }catch(e){
+      console.error(e);
+      if(statusEl) statusEl.textContent = '';
+      alert('Could not import results: ' + e.message);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      importInput.value = '';
+    }
+    return;
+  }
+
+  const fileInput = e.target.closest('[data-update-file]');
+  if(!fileInput) return;
+  const id = fileInput.getAttribute('data-update-file');
+  const file = fileInput.files[0];
+  const statusEl = document.querySelector('[data-status-for="' + CSS.escape(id) + '"]');
+  const btn = document.querySelector('[data-update="' + CSS.escape(id) + '"]');
+  if(!file) return;
+
+  if(!confirm(
+    'Re-import devices for "' + id + '" from ' + file.name + '?\n\n' +
+    'This adds new devices and updates matching existing ones (by device ID). ' +
+    'It will NOT delete any device or touch existing checklist/punch data — ' +
+    'even devices missing from this file are left as-is.'
+  )){
+    fileInput.value = '';
+    return;
+  }
+
   btn.disabled = true;
-  btn.textContent = 'Deleting…';
+  const originalLabel = btn.textContent;
+  if(statusEl) statusEl.textContent = 'Reading file…';
   try{
-    await adminFetch('/api/admin/projects/delete', {method: 'POST', body: JSON.stringify({id: id})});
+    const buf = await file.arrayBuffer();
+    const workbook = XLSX.read(buf, {type: 'array'});
+    const devices = parseWorkbook(workbook);
+    if(statusEl) statusEl.textContent = 'Uploading ' + devices.length + ' devices…';
+    const result = await adminFetch('/api/admin/projects/update-devices', {
+      method: 'POST',
+      body: JSON.stringify({id: id, devices: devices})
+    });
+    if(statusEl) statusEl.textContent = 'Updated ' + result.deviceCount + ' devices just now.';
     loadProjectList();
   }catch(e){
-    alert('Could not delete: ' + e.message);
+    console.error(e);
+    if(statusEl) statusEl.textContent = '';
+    alert('Could not update devices: ' + e.message);
+  }finally{
     btn.disabled = false;
-    btn.textContent = 'Delete';
+    btn.textContent = originalLabel;
+    fileInput.value = '';
   }
 });
 
@@ -149,9 +263,93 @@ function normalizeLocation(s){
   return String(s || '').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
+// Parses this app's OWN "Device Report" export (or a hand-edited copy of
+// one) for the "Import Results" action. Columns are matched by header
+// text — normalized by stripping spaces/pipes/slashes and lowercasing —
+// rather than fixed positions, so it tolerates someone reordering or
+// inserting a column. Requires a "Device ID" column, which only exists
+// in files this app produced (or someone manually added).
+function normalizeHeader(h){
+  return String(h || '').replace(/[\s|/]+/g, '').toLowerCase();
+}
+function parseCheckLabelXlsx(v){
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  if(s === 'pass') return 'pass';
+  if(s === 'fail') return 'fail';
+  return null; // "Untested", blank, or anything unrecognized
+}
+function parseDeviceReportForSync(workbook){
+  const sheetName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'device report'; });
+  if(!sheetName){
+    throw new Error('No "Device Report" sheet found. Sheet names in this file: ' + workbook.SheetNames.join(', '));
+  }
+  const ws = workbook.Sheets[sheetName];
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+  let headerRow = null, cols = {};
+  for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 15); r++){
+    const found = {};
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({r, c})];
+      const h = normalizeHeader(cell ? cell.v : '');
+      if(h === 'deviceid') found.deviceId = c;
+      else if(h === 'location') found.location = c;
+      else if(h === 'devicename') found.name = c;
+      else if(h.indexOf('model') !== -1) found.model = c;
+      else if(h === 'ipaddress') found.ip = c;
+      else if(h === 'ipid') found.ipid = c;
+      else if(h === 'avio') found.avio = c;
+      else if(h === 'power') found.power = c;
+      else if(h === 'network') found.network = c;
+      else if(h === 'function') found.function = c;
+      else if(h === 'note') found.note = c;
+    }
+    if(found.deviceId !== undefined){ headerRow = r; cols = found; break; }
+  }
+  if(headerRow === null){
+    throw new Error('Couldn\'t find a "Device ID" column in the "Device Report" sheet. Was this file exported from this app?');
+  }
+
+  const cellStr = function(r, c){
+    if(c === undefined) return '';
+    const cell = ws[XLSX.utils.encode_cell({r, c})];
+    return cell && cell.v != null ? String(cell.v).trim() : '';
+  };
+
+  const rows = [];
+  for(let r = headerRow + 1; r <= range.e.r; r++){
+    const deviceId = cellStr(r, cols.deviceId);
+    if(!deviceId) continue;
+    rows.push({
+      deviceId: deviceId,
+      location: cellStr(r, cols.location),
+      name: cellStr(r, cols.name),
+      model: cellStr(r, cols.model),
+      ip: cellStr(r, cols.ip),
+      ipid: cellStr(r, cols.ipid),
+      avio: cellStr(r, cols.avio),
+      note: cellStr(r, cols.note),
+      power: parseCheckLabelXlsx(cellStr(r, cols.power)),
+      network: parseCheckLabelXlsx(cellStr(r, cols.network)),
+      function: parseCheckLabelXlsx(cellStr(r, cols.function))
+    });
+  }
+  if(!rows.length) throw new Error('No device rows found below the header.');
+  return rows;
+}
+
 function parseWorkbook(workbook){
-  const diName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'device info'; });
-  if(!diName) throw new Error('No "Device Info" sheet found in this file.');
+  // Tolerates spacing variants ("Device Info", "DeviceInfo", "Device  Info")
+  // but not typos or renamed sheets — those get a clear error listing what
+  // sheet names actually exist, instead of a silent wrong match.
+  const normalize = function(n){ return n.replace(/\s+/g, '').toLowerCase(); };
+  const diName = workbook.SheetNames.find(function(n){ return normalize(n) === 'deviceinfo'; });
+  if(!diName){
+    throw new Error(
+      'No "Device Info" sheet found. Sheet names in this file: ' +
+      (workbook.SheetNames.length ? workbook.SheetNames.join(', ') : '(none found — is this a valid .xlsx file?)')
+    );
+  }
   const di = workbook.Sheets[diName];
 
   const devices = [];
@@ -180,7 +378,7 @@ function parseWorkbook(workbook){
   devices.forEach(function(d){ byName[d.name] = d; });
 
   const portSheetNames = workbook.SheetNames.filter(function(n){
-    return n.trim().toLowerCase().indexOf('port map') === 0;
+    return normalize(n).indexOf('portmap') === 0;
   });
   portSheetNames.forEach(function(sheetName){
     const ws = workbook.Sheets[sheetName];
