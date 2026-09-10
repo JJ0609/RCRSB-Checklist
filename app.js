@@ -650,7 +650,7 @@ async function exportDeviceReport(){
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
-    const dateStr = new Date().toISOString().slice(0.10);
+    const dateStr = new Date().toISOString().slice(0,10);
     const filename = santitizeFilenamePart(projectDisplayName) + '_InfoSheet_' + dateStr + '.xlsx';
     const a = document.createElement('a');
     a.href = url;
