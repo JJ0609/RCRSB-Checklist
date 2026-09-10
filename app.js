@@ -637,7 +637,7 @@ async function exportDeviceReport(){
 
       const tailVals =[p.reportedBy || '', p.createdAt || '', p.resolvedBy || '', p.resolvedAt || ''];
       tailVals.forEach(function(v, i){
-        const cell = rpw.getCell(6+i);
+        const cell = row.getCell(6+i);
         cell.value = v;
         cell.fill = xlFill(band);
       });
