@@ -606,13 +606,17 @@ async function exportDeviceReport(){
 
     // ---- Sheet 2: Punch List ----
     const pl = wb.addWorksheet('Punch List');
-    pl.mergeCells('A1:I1');
+    pl.mergeCells('A1:K1');
     const plTitle = pl.getCell('A1');
     plTitle.value = projectDisplayName + ' — Punch List';
     plTitle.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
     pl.getRow(1).height = 32;
 
-    const punchHeaders = ['Location','Device Name','Description','Severity','Status','Reported By','Created','Resolved By','Resolved At'];
+    // "Punch ID" and "Device ID" are the join keys re-import uses (see
+    // Import Results in admin.html). Leave "Punch ID" blank on a new row
+    // you type by hand to log a new issue offline — it'll be created as
+    // new on import. Leave it filled in on an existing row to update it.
+    const punchHeaders = ['Punch ID','Device ID','Location','Device Name','Description','Severity','Status','Reported By','Created','Resolved By','Resolved At'];
     const punchHeaderRow = pl.getRow(3);
     punchHeaders.forEach(function(h, i){ punchHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(punchHeaderRow, punchHeaders.length);
@@ -623,20 +627,30 @@ async function exportDeviceReport(){
     sortedPunches.forEach(function(p, idx){
       const row = pl.getRow(pr);
       const band = (idx % 2 === 1) ? XL_COLORS.STEEL : XL_COLORS.WHITE;
+
+      const idCell = row.getCell(1);
+      idCell.value = p.id || '';
+      idCell.fill = xlFill(band);
+      idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
+      const devIdCell = row.getCell(2);
+      devIdCell.value = p.deviceId || '';
+      devIdCell.fill = xlFill(band);
+      devIdCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
+
       const plainVals = [p.location || '', p.deviceName || '', p.description || ''];
       plainVals.forEach(function(v, i){
-        const cell = row.getCell(i+1);
+        const cell = row.getCell(i+3);
         cell.value = v;
         cell.fill = xlFill(band);
       });
       const sevStyle = severityCellStyle(p.severity);
-      const sevCell = row.getCell(4);
+      const sevCell = row.getCell(6);
       sevCell.value = (p.severity || '').charAt(0).toUpperCase() + (p.severity || '').slice(1);
       sevCell.fill = xlFill(sevStyle.bg);
       sevCell.font = {bold:true, color:{argb: sevStyle.txt}};
 
       const statStyle = statusCellStyle(p.status);
-      const statCell = row.getCell(5);
+      const statCell = row.getCell(7);
       statCell.value = p.status === 'resolved' ? 'Resolved' : 'Open';
       statCell.fill = xlFill(statStyle.bg);
       statCell.font = {bold:true, color:{argb: statStyle.txt}};
@@ -644,14 +658,14 @@ async function exportDeviceReport(){
       // reportedBy: the tech who submitted this punch item
       const tailVals = [p.reportedBy || '', p.createdAt || '', p.resolvedBy || '', p.resolvedAt || ''];
       tailVals.forEach(function(v, i){
-        const cell = row.getCell(6+i);
+        const cell = row.getCell(8+i);
         cell.value = v;
         cell.fill = xlFill(band);
       });
       pr++;
     });
 
-    pl.columns = [{width:22},{width:18},{width:38},{width:11},{width:11},{width:16},{width:19},{width:16},{width:19}];
+    pl.columns = [{width:20},{width:20},{width:22},{width:18},{width:38},{width:11},{width:11},{width:16},{width:19},{width:16},{width:19}];
     pl.views = [{state:'frozen', ySplit:3}];
 
     const buf = await wb.xlsx.writeBuffer();
