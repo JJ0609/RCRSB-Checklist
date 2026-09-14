@@ -6,12 +6,14 @@
 // cached in sessionStorage only (cleared when the tab closes), never
 // localStorage, so it doesn't linger on a shared computer.
 //
-// Excel parsing mirrors ExtractData.py's column layout exactly:
-// Device Info sheet, rows starting at 3, columns B/C/D/E/F/H/I/J/K.
-// Port Map sheets (any sheet named "Port Map | ..."), rows starting
-// at 7, columns A/B/C/G/H, joined to devices by exact name match.
-// If your Info Sheet format ever changes, update parseWorkbook() here
-// to match — this is the one place that assumption lives.
+// Excel parsing mirrors the real Info Sheet layout:
+// Device Info sheet, rows starting at 3, columns B/C/D/E/F/G/I/K/L
+// (F = combined "Zone # + Amp Channel", split in code; H = Mac Address
+// and J = VLAN are skipped, same as the original Info Sheet skipped a
+// MAC column). Port Map sheets (any sheet named "Port Map | ..."), rows
+// starting at 7, columns A/B/C/G/H, joined to devices by exact name
+// match. If your Info Sheet format ever changes, update parseWorkbook()
+// here to match — this is the one place that assumption lives.
 // ─────────────────────────────────────────────────────────────
 
 function syncConfigured(){
@@ -303,7 +305,7 @@ function parseDeviceReportForSync(workbook){
       else if(h === 'location') found.location = c;
       else if(h === 'devicename') found.name = c;
       else if(h === 'zone') found.zone = c;
-      else if(h === 'ampchannel' || 'channel') found.channel = c; 
+      else if(h === 'ampchannel' || h === 'channel') found.channel = c;
       else if(h.indexOf('model') !== -1) found.model = c;
       else if(h === 'ipaddress') found.ip = c;
       else if(h === 'ipid') found.ipid = c;
@@ -428,28 +430,87 @@ function parseWorkbook(workbook){
   }
   const di = workbook.Sheets[diName];
 
+  // Columns are matched by header text, not fixed position — the real
+  // template is still evolving (columns get added, split, reordered),
+  // so this adapts automatically instead of needing a code edit every
+  // time the layout changes. Zone and Amp Channel are detected as either
+  // one combined column ("Zone # + Amp Channel") or two separate ones,
+  // whichever the file actually has. MAC Address, VLAN, USERNAME, and
+  // PASSWORD are recognized but intentionally never stored — no field
+  // for MAC/VLAN yet, and credentials shouldn't go into a login-free app.
+  const normHeader = function(h){ return String(h || '').replace(/[\s#+|/]+/g, '').toLowerCase(); };
+
+  let headerRow = null, cols = {}, zoneChannelCombined = false;
+  const MAX_HEADER_SCAN = 10;
+  for(let r = 1; r <= MAX_HEADER_SCAN; r++){
+    const found = {};
+    let combined = false;
+    for(let c = 1; c <= 40; c++){
+      const h = normHeader(cellVal(di, r, c));
+      if(!h) continue;
+      if(h === 'componentname' || h === 'devicename') found.name = c;
+      else if(h === 'status') found.status = c;
+      else if(h === 'level') found.level = c;
+      else if(h === 'location') found.location = c;
+      else if(h.indexOf('zone') !== -1 && h.indexOf('channel') !== -1){ found.zone = c; combined = true; }
+      else if(h === 'zone') found.zone = c;
+      else if(h === 'ampchannel' || h === 'channel') found.channel = c;
+      else if(h.indexOf('model') !== -1) found.model = c;
+      else if(h === 'ipaddress') found.ip = c;
+      else if(h === 'id') found.ipid = c;
+      else if(h === 'avio' || h === 'av') found.avio = c;
+      else if(h === 'note') found.note = c;
+    }
+    if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
+  }
+  if(headerRow === null){
+    throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "Device Info" — check the header row is present and spelled recognizably.');
+  }
+
   const devices = [];
+
+  // Splits a combined "Zone # + Amp Channel" cell like "Zone 7 Channel 3"
+  // into separate zone/channel values ("7" and "3" — the display already
+  // adds its own "Zone"/"Ch" labels). Falls back to keeping the whole raw
+  // text in zone (with channel left blank) if it doesn't match the
+  // expected pattern, so nothing silently disappears on an unusual row.
+  function splitZoneChannel(raw){
+    const s = cleanStr(raw);
+    if(!s) return {zone: '', channel: ''};
+    const m = s.match(/^zone\s*(\S+)\s+channel\s*(\S+)$/i);
+    if(m) return {zone: m[1], channel: m[2]};
+    return {zone: s, channel: ''};
+  }
+
   const MAX_ROW = 3200;
-  for(let r = 3; r <= MAX_ROW; r++){
-    const name = cleanStr(cellVal(di, r, 3));
+  for(let r = headerRow + 1; r <= MAX_ROW; r++){
+    const name = cleanStr(cellVal(di, r, cols.name));
     if(!name) continue;
+    let zone = '', channel = '';
+    if(zoneChannelCombined){
+      const zc = splitZoneChannel(cellVal(di, r, cols.zone));
+      zone = zc.zone; channel = zc.channel;
+    } else {
+      zone = cleanStr(cellVal(di, r, cols.zone));
+      channel = cleanStr(cellVal(di, r, cols.channel));
+    }
     devices.push({
       name: name,
-      status: cleanStr(cellVal(di, r, 2)),
-      level: cleanStr(cellVal(di, r, 4)),
-      location: cleanStr(cellVal(di, r, 5)),
-      zone: cleanStr(cellVal(di, r, 6)),
-      channel: cleanStr(cellVal(di, r, 7)),
-      model: cleanStr(cellVal(di, r, 8)),
-      ip: cleanStr(cellVal(di, r, 10)),
-      ipid: cleanStr(cellVal(di, r,11)),
-      avio: cleanStr(cellVal(di, r, 12)),
-      note: cleanStr(cellVal(di, r, 13)),
+      status: cleanStr(cellVal(di, r, cols.status)),
+      level: cleanStr(cellVal(di, r, cols.level)),
+      location: cleanStr(cellVal(di, r, cols.location)),
+      zone: zone,
+      channel: channel,
+      model: cleanStr(cellVal(di, r, cols.model)),
+      ip: cleanStr(cellVal(di, r, cols.ip)),
+      ipid: cleanStr(cellVal(di, r, cols.ipid)),
+      avio: cleanStr(cellVal(di, r, cols.avio)),
+      note: cleanStr(cellVal(di, r, cols.note)),
       ports: []
     });
   }
   if(!devices.length){
-    throw new Error('No devices found in "Device Info" (expected names starting row 3, column C).');
+    throw new Error('No devices found in "Device Info" below the header row (row ' + headerRow + ').');
   }
 
   const byName = {};
