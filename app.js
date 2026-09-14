@@ -677,9 +677,9 @@ async function exportDeviceReport(){
 
       const ownStyle = ownershipCellStyle(p.ownership);
       const ownCell = row.getCell(6);
-      sevCell.value = (p.ownership || '').charAt(0).toUpperCase() + (p.ownership || '').slice(1);
-      sevCell.fill = xlFill(sevStyle.bg);
-      sevCell.font = {bold:true, color:{argb: sevStyle.txt}};
+      ownCell.value = (p.ownership || '').charAt(0).toUpperCase() + (p.ownership || '').slice(1);
+      ownCell.fill = xlFill(sevStyle.bg);
+      ownCell.font = {bold:true, color:{argb: sevStyle.txt}};
 
       const statStyle = statusCellStyle(p.status);
       const statCell = row.getCell(7);
