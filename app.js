@@ -31,6 +31,8 @@ let searchQuery = '';
 let punchStatusFilter = 'open';
 let punchLocationFilter = '';
 let openPunchFormFor = null;
+let editingPunchId = null;
+let editDraftText = {};
 let pendingSeverity = 'major';
 let pendingOwnership = 'Field Tech/Install';
 let punchDraftText = {};
@@ -310,19 +312,43 @@ function renderPunchList(){
     html += '<div class="empty">No punch items here yet.</div>';
   } else {
     list.forEach(function(p){
+      if(editingPunchId === p.id){
+        html += '<div class="punch-item">'
+          + '<div class="sev-stripe ' + pendingSeverity + '"></div>'
+          + '<div class="own-stripe" data-own="' + esc(pendingOwnership) + '"></div>'
+          + '<div class="punch-body" style="width:100%;">'
+          + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
+          + '<div class="punch-form" style="margin-top:8px;padding:0;background:none;">'
+          + '<textarea id="editPunchDesc">' + esc(editDraftText[p.id] !== undefined ? editDraftText[p.id] : p.description) + '</textarea>'
+          + '<div class="sev-row">'
+          + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+          + '</div>'
+          + '<div class="sev-row">'
+          + OWNERSHIPS.map(function(s){ return '<button class="own-btn' + (pendingOwnership===s?' sel':'') + '" data-own="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+          + '</div>'
+          + '<div class="form-actions">'
+          + '<button class="btn ghost" id="cancelEditPunch">Cancel</button>'
+          + '<button class="btn primary" id="saveEditPunch" data-punch="' + esc(p.id) + '">Save changes</button>'
+          + '</div></div>'
+          + '</div>'
+          + '</div>';
+        return;
+      }
       html += '<div class="punch-item">'
         + '<div class="sev-stripe ' + (p.severity||'minor') + '"></div>'
         + '<div class="own-stripe" data-own="' + esc(p.ownership||'Field Tech/Install') + '"></div>'
         + '<div class="punch-body">'
-        + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc" data-loc="' 
-        + esc(p.location||'') + '" style="cursor:pointer;">&middot; ' + esc(p.location||'') + '</span></span></div>'
+        + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc" data-loc="' + esc(p.location||'') + '" style="cursor:pointer;">&middot; ' + esc(p.location||'') + '</span></span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'
         + '<div class="meta"><span>' + (p.severity||'minor').toUpperCase() + '</span>'
         + '<span>' + (p.ownership||'Field Tech/Install').toUpperCase() + '</span>'
         + (p.reportedBy ? ('<span>Reported by ' + esc(p.reportedBy) + '</span>') : '')
         + '<span>' + fmtTime(p.createdAt) + '</span></div>'
         + '</div>'
+        + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">'
         + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?'Mark resolved':'Resolved') + '</button>'
+        + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
+        + '</div>'
         + '</div>';
     });
   }
@@ -409,6 +435,13 @@ async function pushToggleResolve(punchId, actorName){
   });
 }
 
+async function pushEditPunch(punchId, description, severity, ownership, actorName){
+  return apiCall('/api/punch/edit', {
+    method: 'POST',
+    body: JSON.stringify({project: currentProject, id: punchId, description: description, severity: severity, ownership: ownership, actorName: actorName})
+  });
+}
+
 // While someone is actively typing a punch description, a background
 // re-render would tear down and rebuild that textarea's DOM node,
 // silently kicking focus out of it every poll cycle (every 5 seconds).
@@ -417,7 +450,7 @@ async function pushToggleResolve(punchId, actorName){
 // person does something that naturally re-renders (submit, cancel,
 // toggle a check, switch tabs).
 function isComposingPunch(){
-  return document.activeElement && document.activeElement.id === 'punchDesc';
+  return document.activeElement && (document.activeElement.id === 'punchDesc' || document.activeElement.id === 'editPunchDesc');
 }
 
 async function syncFromRemote(){
@@ -493,6 +526,23 @@ function toggleResolve(punchId){
   }
 }
 
+function submitPunchEdit(punchId){
+  const p = punches.find(function(x){ return x.id === punchId; });
+  if(!p) return;
+  const desc = (editDraftText[punchId] !== undefined ? editDraftText[punchId] : (document.getElementById('editPunchDesc') || {}).value || '').trim();
+  if(!desc) return;
+  p.description = desc;
+  p.severity = pendingSeverity;
+  p.ownership = pendingOwnership;
+  editingPunchId = null;
+  delete editDraftText[punchId];
+  saveCache();
+  renderContent();
+  if(syncConfigured() && String(p.id).indexOf('local-') !== 0){
+    pushEditPunch(p.id, desc, p.severity, p.ownership, techName || 'Unnamed tech').catch(function(e){ console.error(e); /* will reconcile on next poll */ });
+  }
+}
+
 // ---------- CSV export ----------
 function csvEscape(v){
   const s = String(v==null?'':v);
@@ -533,9 +583,13 @@ const XL_COLORS = {
   MINOR_BG: 'FFEDEDED', MINOR_TXT: 'FF53565A',
   MAJOR_BG: 'FFFCEEDD', MAJOR_TXT: 'FFB5620A',
   CRITICAL_BG: 'FFF9DADF', CRITICAL_TXT: 'FFC8102E',
+  // Ownership colors are deliberately a different hue family (teal/violet/gold)
+  // than severity's red/amber/gray — Severity and Ownership sit side by side
+  // in the same row, so reusing that palette would make it look like
+  // Ownership was also signaling urgency.
   OWN_FIELD_BG: 'FFDFF5F2', OWN_FIELD_TXT: 'FF0E7C71',
   OWN_PROGRAMMING_BG: 'FFEFE6FB', OWN_PROGRAMMING_TXT: 'FF6B3FC2',
-  OWN_CONFIG_BG: 'FFFBF1D2', OWN_CONFIG_TXT: 'FF8A6D14',
+  OWN_CONFIG_BG: 'FFFBF1D2', OWN_CONFIG_TXT: 'FF8A6D14'
 };
 function xlFill(argb){ return {type:'pattern', pattern:'solid', fgColor:{argb: argb}}; }
 function checkCellStyle(v){
@@ -760,11 +814,14 @@ document.getElementById('content').addEventListener('click', function(e){
   const cancelBtn = e.target.closest('#cancelPunch');
   if(cancelBtn){ delete punchDraftText[openPunchFormFor]; openPunchFormFor = null; renderContent(); return; }
 
+  const cancelEditBtn = e.target.closest('#cancelEditPunch');
+  if(cancelEditBtn){ delete editDraftText[editingPunchId]; editingPunchId = null; renderContent(); return; }
+
   const sevBtn = e.target.closest('.sev-btn');
   if(sevBtn){
     pendingSeverity = sevBtn.getAttribute('data-sev');
     renderContent();
-    const ta = document.getElementById('punchDesc');
+    const ta = document.getElementById(editingPunchId ? 'editPunchDesc' : 'punchDesc');
     if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
     return;
   }
@@ -773,13 +830,30 @@ document.getElementById('content').addEventListener('click', function(e){
   if(ownBtn){
     pendingOwnership = ownBtn.getAttribute('data-own');
     renderContent();
-    const ta = document.getElementById('punchDesc');
+    const ta = document.getElementById(editingPunchId ? 'editPunchDesc' : 'punchDesc');
     if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
     return;
   }
 
   const submitBtn = e.target.closest('#submitPunch');
   if(submitBtn){ submitPunch(submitBtn.getAttribute('data-device')); return; }
+
+  const editPunchBtn = e.target.closest('[data-editpunch]');
+  if(editPunchBtn){
+    const id = editPunchBtn.getAttribute('data-editpunch');
+    const p = punches.find(function(x){ return x.id === id; });
+    if(p){
+      editingPunchId = id;
+      pendingSeverity = p.severity || 'minor';
+      pendingOwnership = p.ownership || 'Field Tech/Install';
+      renderContent();
+      setTimeout(function(){ const ta = document.getElementById('editPunchDesc'); if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); } }, 0);
+    }
+    return;
+  }
+
+  const saveEditBtn = e.target.closest('#saveEditPunch');
+  if(saveEditBtn){ submitPunchEdit(saveEditBtn.getAttribute('data-punch')); return; }
 
   const statusBtn = e.target.closest('.status-btn');
   if(statusBtn){ toggleResolve(statusBtn.getAttribute('data-punch')); return; }
@@ -795,6 +869,7 @@ document.getElementById('content').addEventListener('change', function(e){
 });
 document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id === 'punchDesc' && openPunchFormFor){ punchDraftText[openPunchFormFor] = e.target.value; }
+  if(e.target.id === 'editPunchDesc' && editingPunchId){ editDraftText[editingPunchId] = e.target.value; }
 });
 
 document.getElementById('searchInput').addEventListener('input', function(e){
