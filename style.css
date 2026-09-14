@@ -353,6 +353,7 @@ a{color:inherit;}
 .punch-body .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
 .punch-body .loc-dev{font-weight:700;font-size:13.5px;}
 .punch-body .loc-dev .loc{color:var(--ink-soft);font-weight:600;}
+.punch-body .loc-dev .loc:hover{text-decoration:underline;color:var(--accent);}
 .punch-body .desc{font-size:13.5px;margin:5px 0 6px;}
 .punch-body .meta{font-size:11px;color:var(--ink-soft);display:flex;gap:10px;flex-wrap:wrap;}
 .status-btn{
