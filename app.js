@@ -312,7 +312,7 @@ function renderPunchList(){
     list.forEach(function(p){
       html += '<div class="punch-item">'
         + '<div class="sev-stripe ' + (p.severity||'minor') + '"></div>'
-        + '<div class="own-stripe ' + (p.ownership||'Field Tech/Install') + '"></div>'
+        + '<div class="own-stripe" data-own="' + esc(p.ownership||'Field Tech/Install') + '"></div>'
         + '<div class="punch-body">'
         + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'

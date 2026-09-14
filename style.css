@@ -346,9 +346,9 @@ a{color:inherit;}
 .sev-stripe.major{background:var(--open);}
 .sev-stripe.critical{background:var(--fail);}
 .own-stripe{width:4px;border-radius:3px;flex:none;}
-.own-stripe.field{background:var(--own-field);}
-.own-stripe.programming{background:var(--own-programming);}
-.own-stripe.config{background:var(--own-config);}
+.own-stripe[data-own="Field Tech/Install"]{background:var(--own-field);}
+.own-stripe[data-own="Programming"]{background:var(--own-programming);}
+.own-stripe[data-own="Configuration"]{background:var(--own-config);}
 .punch-body{flex:1;min-width:0;}
 .punch-body .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;}
 .punch-body .loc-dev{font-weight:700;font-size:13.5px;}
