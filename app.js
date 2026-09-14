@@ -262,9 +262,13 @@ function deviceCardHtml(d, showLocation){
   if(devicePunches.length){
     html += '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">';
     devicePunches.forEach(function(p){
+      const st = p.status === 'resolved' ? {bg:'var(--pass-bg)', txt:'var(--pass)'}
+        : p.severity === 'critical' ? {bg:'var(--fail-bg)', txt:'var(--fail)'}
+        : p.severity === 'major' ? {bg:'var(--open-bg)', txt:'var(--open)'}
+        : {bg:'var(--pending-bg)', txt:'var(--pending)'};
       html += '<div style="font-size:11.5px;display:flex;justify-content:space-between;gap:6px;align-items:center;background:'
-        + (p.status==='open'?'var(--open-bg)':'var(--pass-bg)') + ';border-radius:7px;padding:5px 8px;">'
-        + '<span style="color:' + (p.status==='open'?'var(--open)':'var(--pass)') + ';font-weight:600;">' + esc(p.description) + '</span>'
+        + st.bg + ';border-radius:7px;padding:5px 8px;">'
+        + '<span style="color:' + st.txt + ';font-weight:600;">' + esc(p.description) + '</span>'
         + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '" style="padding:3px 9px;font-size:10.5px;">' + (p.status==='open'?'Open':'Resolved') + '</button>'
         + '</div>';
     });
