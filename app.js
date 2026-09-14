@@ -14,6 +14,7 @@ const CHECKS = [
   {key:'function', label:'Function'}
 ];
 const SEVERITIES = ['minor','major','critical'];
+const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration'];
 
 let currentProject = null;   // set from the ?project= URL param at boot
 let currentProjectMeta = { name: '', shortName: '' };
@@ -22,7 +23,7 @@ let LOCATIONS = [];
 let DEVICE_BY_ID = {};
 
 let checklist = {};   // deviceId -> {power,network,function}
-let punches = [];     // {id, deviceId, deviceName, location, description, severity, status, reportedBy, createdAt, resolvedBy, resolvedAt}
+let punches = [];     // {id, deviceId, deviceName, location, description, severity, status, Ownership, reportedBy, createdAt, resolvedBy, resolvedAt}
 let techName = localStorage.getItem('pd_tech_name') || '';
 let view = 'locations';
 let currentLocation = null;
@@ -31,6 +32,7 @@ let punchStatusFilter = 'open';
 let punchLocationFilter = '';
 let openPunchFormFor = null;
 let pendingSeverity = 'major';
+let pendingOwnserhip = 'configuration'
 let punchDraftText = {};
 let syncEnabled = false;
 let pollTimer = null;
@@ -270,6 +272,9 @@ function deviceCardHtml(d, showLocation){
       + '<div class="sev-row">'
       + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
       + '</div>'
+      + '<div class="sev-row">'
+      + OWNERSHIPS.map(function(s){ return '<button class="own-btn' + (pendingOwnserhip===s?' sel':'') + '" data-own="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+      + '</div>'
       + '<div class="form-actions">'
       + '<button class="btn ghost" id="cancelPunch">Cancel</button>'
       + '<button class="btn primary" id="submitPunch" data-device="' + esc(d.id) + '">Log punch item</button>'
@@ -309,6 +314,7 @@ function renderPunchList(){
         + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'
         + '<div class="meta"><span>' + (p.severity||'minor').toUpperCase() + '</span>'
+        + '<div class="meta"><span>' + (p.ownership||'field Tech/Install').toUpperCase() + '</span>'
         + (p.reportedBy ? ('<span>Reported by ' + esc(p.reportedBy) + '</span>') : '')
         + '<span>' + fmtTime(p.createdAt) + '</span></div>'
         + '</div>'
@@ -386,7 +392,7 @@ async function pushPunch(item){
     method: 'POST',
     body: JSON.stringify({
       project: currentProject, deviceId: item.deviceId, deviceName: item.deviceName,
-      location: item.location, description: item.description, severity: item.severity,
+      location: item.location, description: item.description, severity: item.severity, ownership: item.ownership,
       reportedBy: item.reportedBy
     })
   });
@@ -455,7 +461,7 @@ function submitPunch(deviceId){
   const tempId = 'local-' + Date.now();
   const item = {
     id: tempId, deviceId: deviceId, deviceName: dev.name, location: dev.location,
-    description: desc, severity: pendingSeverity, status: 'open',
+    description: desc, severity: pendingSeverity, ownership: pendingOwnserhip, status: 'open',
     reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
   };
   punches.push(item);
@@ -491,9 +497,9 @@ function csvEscape(v){
 }
 async function exportCsv(){
   let list = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
-  const rows = [['Location','Device','Description','Severity','Status','Reported By','Created','Resolved By','Resolved At']];
+  const rows = [['Location','Device','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At']];
   list.forEach(function(p){
-    rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.status, p.reportedBy||'', p.createdAt||'', p.resolvedBy||'', p.resolvedAt||'']);
+    rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.ownership, p.status, p.reportedBy||'', p.createdAt||'', p.resolvedBy||'', p.resolvedAt||'']);
   });
   const csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
   try{
@@ -533,6 +539,11 @@ function checkCellStyle(v){
 function severityCellStyle(sev){
   if(sev === 'critical') return {bg: XL_COLORS.CRITICAL_BG, txt: XL_COLORS.CRITICAL_TXT};
   if(sev === 'major') return {bg: XL_COLORS.MAJOR_BG, txt: XL_COLORS.MAJOR_TXT};
+  return {bg: XL_COLORS.MINOR_BG, txt: XL_COLORS.MINOR_TXT};
+}
+function ownershipCellStyle(own){
+  if(sev === 'field Tech/Install') return {bg: XL_COLORS.CRITICAL_BG, txt: XL_COLORS.CRITICAL_TXT};
+  if(sev === 'programming') return {bg: XL_COLORS.MAJOR_BG, txt: XL_COLORS.MAJOR_TXT};
   return {bg: XL_COLORS.MINOR_BG, txt: XL_COLORS.MINOR_TXT};
 }
 function statusCellStyle(status){
@@ -631,7 +642,7 @@ async function exportDeviceReport(){
     // Import Results in admin.html). Leave "Punch ID" blank on a new row
     // you type by hand to log a new issue offline — it'll be created as
     // new on import. Leave it filled in on an existing row to update it.
-    const punchHeaders = ['Punch ID','Device ID','Location','Device Name','Description','Severity','Status','Reported By','Created','Resolved By','Resolved At'];
+    const punchHeaders = ['Punch ID','Device ID','Location','Device Name','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At'];
     const punchHeaderRow = pl.getRow(3);
     punchHeaders.forEach(function(h, i){ punchHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(punchHeaderRow, punchHeaders.length);
@@ -661,6 +672,12 @@ async function exportDeviceReport(){
       const sevStyle = severityCellStyle(p.severity);
       const sevCell = row.getCell(6);
       sevCell.value = (p.severity || '').charAt(0).toUpperCase() + (p.severity || '').slice(1);
+      sevCell.fill = xlFill(sevStyle.bg);
+      sevCell.font = {bold:true, color:{argb: sevStyle.txt}};
+
+      const ownStyle = ownershipCellStyle(p.ownership);
+      const ownCell = row.getCell(6);
+      sevCell.value = (p.ownership || '').charAt(0).toUpperCase() + (p.ownership || '').slice(1);
       sevCell.fill = xlFill(sevStyle.bg);
       sevCell.font = {bold:true, color:{argb: sevStyle.txt}};
 
@@ -738,6 +755,15 @@ document.getElementById('content').addEventListener('click', function(e){
   const sevBtn = e.target.closest('.sev-btn');
   if(sevBtn){
     pendingSeverity = sevBtn.getAttribute('data-sev');
+    renderContent();
+    const ta = document.getElementById('punchDesc');
+    if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
+    return;
+  }
+
+  const ownBtn = e.target.closest('.own-btn');
+  if(sevBtn){
+    pendingOwnserhip = sevBtn.getAttribute('data-own');
     renderContent();
     const ta = document.getElementById('punchDesc');
     if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
