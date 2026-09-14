@@ -315,7 +315,6 @@ function renderPunchList(){
       if(editingPunchId === p.id){
         html += '<div class="punch-item">'
           + '<div class="sev-stripe ' + pendingSeverity + '"></div>'
-          + '<div class="own-stripe" data-own="' + esc(pendingOwnership) + '"></div>'
           + '<div class="punch-body" style="width:100%;">'
           + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
           + '<div class="punch-form" style="margin-top:8px;padding:0;background:none;">'
@@ -336,7 +335,6 @@ function renderPunchList(){
       }
       html += '<div class="punch-item">'
         + '<div class="sev-stripe ' + (p.severity||'minor') + '"></div>'
-        + '<div class="own-stripe" data-own="' + esc(p.ownership||'Field Tech/Install') + '"></div>'
         + '<div class="punch-body">'
         + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc" data-loc="' + esc(p.location||'') + '" style="cursor:pointer;">&middot; ' + esc(p.location||'') + '</span></span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'
