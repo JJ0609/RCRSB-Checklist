@@ -370,6 +370,7 @@ function parsePunchListForSync(workbook){
       else if(h === 'devicename') found.deviceName = c;
       else if(h === 'description') found.description = c;
       else if(h === 'severity') found.severity = c;
+      else if(h === 'ownership') found.ownership = c;
       else if(h === 'status') found.status = c;
       else if(h === 'reportedby') found.reportedBy = c;
       else if(h === 'created') found.created = c;
@@ -399,6 +400,7 @@ function parsePunchListForSync(workbook){
       location: cellStr(r, cols.location),
       description: description,
       severity: cellStr(r, cols.severity),
+      ownership: cellStr(r, cols.ownership),
       status: cellStr(r, cols.status),
       reportedBy: cellStr(r, cols.reportedBy),
       resolvedBy: cellStr(r, cols.resolvedBy),

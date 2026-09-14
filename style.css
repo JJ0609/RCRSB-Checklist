@@ -27,6 +27,12 @@ img{max-width:100%}
   --pending-bg:#F1EBE3;
   --open:#B5620A;
   --open-bg:#FCEEDD;
+  --own-field:#0E7C71;
+  --own-field-bg:#DFF5F2;
+  --own-programming:#6B3FC2;
+  --own-programming-bg:#EFE6FB;
+  --own-config:#8A6D14;
+  --own-config-bg:#FBF1D2;
   --shadow: 0 1px 2px rgba(23,20,15,0.06), 0 8px 24px -12px rgba(23,20,15,0.18);
   --focus: 0 0 0 3px rgba(200,16,46,0.35);
 
@@ -64,6 +70,12 @@ img{max-width:100%}
     --pending-bg:#2A2620;
     --open:#E8A244;
     --open-bg:#3A2A10;
+    --own-field:#4FD9C7;
+    --own-field-bg:#123B37;
+    --own-programming:#B79AF0;
+    --own-programming-bg:#2C2140;
+    --own-config:#E8C860;
+    --own-config-bg:#3A2F10;
     --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
 
     --topbar-bg:#0F0D0B;
@@ -98,6 +110,12 @@ img{max-width:100%}
   --pending-bg:#2A2620;
   --open:#E8A244;
   --open-bg:#3A2A10;
+  --own-field:#4FD9C7;
+  --own-field-bg:#123B37;
+  --own-programming:#B79AF0;
+  --own-programming-bg:#2C2140;
+  --own-config:#E8C860;
+  --own-config-bg:#3A2F10;
   --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
 
   --topbar-bg:#0F0D0B;
@@ -289,6 +307,11 @@ a{color:inherit;}
 .sev-btn.sel[data-sev="minor"]{background:var(--pending-bg);border-color:var(--pending);color:var(--ink);}
 .sev-btn.sel[data-sev="major"]{background:var(--open-bg);border-color:var(--open);color:var(--open);}
 .sev-btn.sel[data-sev="critical"]{background:var(--fail-bg);border-color:var(--fail);color:var(--fail);}
+
+.own-btn{flex:1;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);padding:6px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-soft);}
+.own-btn.sel[data-own="Field Tech/Install"]{background:var(--own-field-bg);border-color:var(--own-field);color:var(--own-field);}
+.own-btn.sel[data-own="Programming"]{background:var(--own-programming-bg);border-color:var(--own-programming);color:var(--own-programming);}
+.own-btn.sel[data-own="Configuration"]{background:var(--own-config-bg);border-color:var(--own-config);color:var(--own-config);}
 .form-actions{display:flex;gap:8px;justify-content:flex-end;}
 .btn{border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--ink);}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}

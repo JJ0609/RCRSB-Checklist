@@ -32,7 +32,7 @@ let punchStatusFilter = 'open';
 let punchLocationFilter = '';
 let openPunchFormFor = null;
 let pendingSeverity = 'major';
-let pendingOwnserhip = 'configuration'
+let pendingOwnership = 'Field Tech/Install';
 let punchDraftText = {};
 let syncEnabled = false;
 let pollTimer = null;
@@ -273,7 +273,7 @@ function deviceCardHtml(d, showLocation){
       + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
       + '</div>'
       + '<div class="sev-row">'
-      + OWNERSHIPS.map(function(s){ return '<button class="own-btn' + (pendingOwnserhip===s?' sel':'') + '" data-own="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+      + OWNERSHIPS.map(function(s){ return '<button class="own-btn' + (pendingOwnership===s?' sel':'') + '" data-own="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
       + '</div>'
       + '<div class="form-actions">'
       + '<button class="btn ghost" id="cancelPunch">Cancel</button>'
@@ -314,7 +314,7 @@ function renderPunchList(){
         + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'
         + '<div class="meta"><span>' + (p.severity||'minor').toUpperCase() + '</span>'
-        + '<div class="meta"><span>' + (p.ownership||'field Tech/Install').toUpperCase() + '</span>'
+        + '<span>' + (p.ownership||'Field Tech/Install').toUpperCase() + '</span>'
         + (p.reportedBy ? ('<span>Reported by ' + esc(p.reportedBy) + '</span>') : '')
         + '<span>' + fmtTime(p.createdAt) + '</span></div>'
         + '</div>'
@@ -461,7 +461,7 @@ function submitPunch(deviceId){
   const tempId = 'local-' + Date.now();
   const item = {
     id: tempId, deviceId: deviceId, deviceName: dev.name, location: dev.location,
-    description: desc, severity: pendingSeverity, ownership: pendingOwnserhip, status: 'open',
+    description: desc, severity: pendingSeverity, ownership: pendingOwnership, status: 'open',
     reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
   };
   punches.push(item);
@@ -528,7 +528,10 @@ const XL_COLORS = {
   RESOLVED_BG: 'FFDCEFE1', RESOLVED_TXT: 'FF1F7A4D',
   MINOR_BG: 'FFEDEDED', MINOR_TXT: 'FF53565A',
   MAJOR_BG: 'FFFCEEDD', MAJOR_TXT: 'FFB5620A',
-  CRITICAL_BG: 'FFF9DADF', CRITICAL_TXT: 'FFC8102E'
+  CRITICAL_BG: 'FFF9DADF', CRITICAL_TXT: 'FFC8102E',
+  OWN_FIELD_BG: 'FFDFF5F2', OWN_FIELD_TXT: 'FF0E7C71',
+  OWN_PROGRAMMING_BG: 'FFEFE6FB', OWN_PROGRAMMING_TXT: 'FF6B3FC2',
+  OWN_CONFIG_BG: 'FFFBF1D2', OWN_CONFIG_TXT: 'FF8A6D14',
 };
 function xlFill(argb){ return {type:'pattern', pattern:'solid', fgColor:{argb: argb}}; }
 function checkCellStyle(v){
@@ -542,9 +545,10 @@ function severityCellStyle(sev){
   return {bg: XL_COLORS.MINOR_BG, txt: XL_COLORS.MINOR_TXT};
 }
 function ownershipCellStyle(own){
-  if(sev === 'field Tech/Install') return {bg: XL_COLORS.CRITICAL_BG, txt: XL_COLORS.CRITICAL_TXT};
-  if(sev === 'programming') return {bg: XL_COLORS.MAJOR_BG, txt: XL_COLORS.MAJOR_TXT};
-  return {bg: XL_COLORS.MINOR_BG, txt: XL_COLORS.MINOR_TXT};
+  if(own === 'Field Tech/Install') return {bg: XL_COLORS.OWN_FIELD_BG, txt: XL_COLORS.OWN_FIELD_TXT};
+  if(own === 'Programming') return {bg: XL_COLORS.OWN_PROGRAMMING_BG, txt: XL_COLORS.OWN_PROGRAMMING_TXT};
+  if(own === 'Configuration') return {bg: XL_COLORS.OWN_CONFIG_BG, txt: XL_COLORS.OWN_CONFIG_TXT};
+  return {bg: XL_COLORS.GRAVEL_BG, txt: XL_COLORS.GRAVEL_TXT};
 }
 function statusCellStyle(status){
   return status === 'resolved'
@@ -632,7 +636,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 2: Punch List ----
     const pl = wb.addWorksheet('Punch List');
-    pl.mergeCells('A1:K1');
+    pl.mergeCells('A1:L1');
     const plTitle = pl.getCell('A1');
     plTitle.value = projectDisplayName + ' — Punch List';
     plTitle.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -676,13 +680,13 @@ async function exportDeviceReport(){
       sevCell.font = {bold:true, color:{argb: sevStyle.txt}};
 
       const ownStyle = ownershipCellStyle(p.ownership);
-      const ownCell = row.getCell(6);
-      ownCell.value = (p.ownership || '').charAt(0).toUpperCase() + (p.ownership || '').slice(1);
-      ownCell.fill = xlFill(sevStyle.bg);
-      ownCell.font = {bold:true, color:{argb: sevStyle.txt}};
+      const ownCell = row.getCell(7);
+      ownCell.value = p.ownership || '';
+      ownCell.fill = xlFill(ownStyle.bg);
+      ownCell.font = {bold:true, color:{argb: ownStyle.txt}};
 
       const statStyle = statusCellStyle(p.status);
-      const statCell = row.getCell(7);
+      const statCell = row.getCell(8);
       statCell.value = p.status === 'resolved' ? 'Resolved' : 'Open';
       statCell.fill = xlFill(statStyle.bg);
       statCell.font = {bold:true, color:{argb: statStyle.txt}};
@@ -690,14 +694,14 @@ async function exportDeviceReport(){
       // reportedBy: the tech who submitted this punch item
       const tailVals = [p.reportedBy || '', p.createdAt || '', p.resolvedBy || '', p.resolvedAt || ''];
       tailVals.forEach(function(v, i){
-        const cell = row.getCell(8+i);
+        const cell = row.getCell(9+i);
         cell.value = v;
         cell.fill = xlFill(band);
       });
       pr++;
     });
 
-    pl.columns = [{width:20},{width:20},{width:22},{width:18},{width:38},{width:11},{width:11},{width:16},{width:19},{width:16},{width:19}];
+    pl.columns = [{width:20},{width:20},{width:22},{width:18},{width:38},{width:11},{width:16},{width:11},{width:16},{width:19},{width:16},{width:19}];
     pl.views = [{state:'frozen', ySplit:3}];
 
     const buf = await wb.xlsx.writeBuffer();
@@ -746,7 +750,7 @@ document.getElementById('content').addEventListener('click', function(e){
   if(checkPill){ toggleCheck(checkPill.getAttribute('data-device'), checkPill.getAttribute('data-check')); return; }
 
   const addBtn = e.target.closest('.punch-add-btn');
-  if(addBtn){ openPunchFormFor = addBtn.getAttribute('data-device'); pendingSeverity='major'; renderContent();
+  if(addBtn){ openPunchFormFor = addBtn.getAttribute('data-device'); pendingSeverity='major'; pendingOwnership='Field Tech/Install'; renderContent();
     setTimeout(function(){ const ta = document.getElementById('punchDesc'); if(ta) ta.focus(); }, 0); return; }
 
   const cancelBtn = e.target.closest('#cancelPunch');
@@ -762,8 +766,8 @@ document.getElementById('content').addEventListener('click', function(e){
   }
 
   const ownBtn = e.target.closest('.own-btn');
-  if(sevBtn){
-    pendingOwnserhip = sevBtn.getAttribute('data-own');
+  if(ownBtn){
+    pendingOwnership = ownBtn.getAttribute('data-own');
     renderContent();
     const ta = document.getElementById('punchDesc');
     if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
