@@ -241,6 +241,8 @@ function deviceCardHtml(d, showLocation){
   html += '<div class="device-data mono">';
   if(d.ip) html += '<span>IP <b>' + esc(d.ip) + '</b></span>';
   if(d.ipid) html += '<span>' + esc(d.ipid) + '</span>';
+  if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
+  if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
@@ -310,6 +312,7 @@ function renderPunchList(){
     list.forEach(function(p){
       html += '<div class="punch-item">'
         + '<div class="sev-stripe ' + (p.severity||'minor') + '"></div>'
+        + '<div class="own-stripe ' + (p.ownership||'Field Tech/Install') + '"></div>'
         + '<div class="punch-body">'
         + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'
@@ -584,7 +587,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:K1');
+    ws.mergeCells('A1:M1');
     const title = ws.getCell('A1');
     title.value = projectDisplayName + ' — Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -593,7 +596,7 @@ async function exportDeviceReport(){
     // "Device ID" is the stable join key for re-importing this file later
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
-    const deviceHeaders = ['Device ID','Location','Device Name','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Note'];
+    const deviceHeaders = ['Device ID','Location','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Note'];
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
@@ -612,7 +615,7 @@ async function exportDeviceReport(){
       idCell.value = d.id;
       idCell.fill = xlFill(band);
       idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
-      const plainVals = [d.location, d.name, d.model, d.ip, d.ipid, d.avio];
+      const plainVals = [d.location, d.name, d.zone, d.channel, d.model, d.ip, d.ipid, d.avio];
       plainVals.forEach(function(v, i){
         const cell = row.getCell(i+2);
         cell.value = v || '';
@@ -620,18 +623,18 @@ async function exportDeviceReport(){
       });
       [c.power, c.network, c.function].forEach(function(v, i){
         const st = checkCellStyle(v);
-        const cell = row.getCell(8+i);
+        const cell = row.getCell(10+i);
         cell.value = st.label;
         cell.fill = xlFill(st.bg);
         cell.font = {bold:true, color:{argb: st.txt}};
       });
-      const noteCell = row.getCell(11);
+      const noteCell = row.getCell(13);
       noteCell.value = d.note || '';
       noteCell.fill = xlFill(band);
       r++;
     });
 
-    ws.columns = [{width:20},{width:26},{width:20},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:30}];
+    ws.columns = [{width:20},{width:26},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:30}];
     ws.views = [{state:'frozen', ySplit:3}];
 
     // ---- Sheet 2: Punch List ----

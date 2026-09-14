@@ -302,6 +302,8 @@ function parseDeviceReportForSync(workbook){
       if(h === 'deviceid') found.deviceId = c;
       else if(h === 'location') found.location = c;
       else if(h === 'devicename') found.name = c;
+      else if(h === 'zone') found.zone = c;
+      else if(h === 'ampchannel' || 'channel') found.channel = c; 
       else if(h.indexOf('model') !== -1) found.model = c;
       else if(h === 'ipaddress') found.ip = c;
       else if(h === 'ipid') found.ipid = c;
@@ -331,6 +333,8 @@ function parseDeviceReportForSync(workbook){
       deviceId: deviceId,
       location: cellStr(r, cols.location),
       name: cellStr(r, cols.name),
+      zone: cellStr(r, cols.zone),
+      channel: cellStr(r, cols.channel),
       model: cellStr(r, cols.model),
       ip: cellStr(r, cols.ip),
       ipid: cellStr(r, cols.ipid),
@@ -415,7 +419,7 @@ function parseWorkbook(workbook){
   // but not typos or renamed sheets — those get a clear error listing what
   // sheet names actually exist, instead of a silent wrong match.
   const normalize = function(n){ return n.replace(/\s+/g, '').toLowerCase(); };
-  const diName = workbook.SheetNames.find(function(n){ return normalize(n) === 'deviceinfo'; });
+  const diName = workbook.SheetNames.find(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo'; });
   if(!diName){
     throw new Error(
       'No "Device Info" sheet found. Sheet names in this file: ' +
@@ -434,11 +438,13 @@ function parseWorkbook(workbook){
       status: cleanStr(cellVal(di, r, 2)),
       level: cleanStr(cellVal(di, r, 4)),
       location: cleanStr(cellVal(di, r, 5)),
-      model: cleanStr(cellVal(di, r, 6)),
-      ip: cleanStr(cellVal(di, r, 8)),
-      ipid: cleanStr(cellVal(di, r, 9)),
-      avio: cleanStr(cellVal(di, r, 10)),
-      note: cleanStr(cellVal(di, r, 11)),
+      zone: cleanStr(cellVal(di, r, 6)),
+      channel: cleanStr(cellVal(di, r, 7)),
+      model: cleanStr(cellVal(di, r, 8)),
+      ip: cleanStr(cellVal(di, r, 10)),
+      ipid: cleanStr(cellVal(di, r,11)),
+      avio: cleanStr(cellVal(di, r, 12)),
+      note: cleanStr(cellVal(di, r, 13)),
       ports: []
     });
   }
