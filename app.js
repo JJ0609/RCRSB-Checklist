@@ -240,7 +240,7 @@ function deviceCardHtml(d, showLocation){
     + '</div></div>';
   html += '<div class="device-data mono">';
   if(d.ip) html += '<span>IP <b>' + esc(d.ip) + '</b></span>';
-  if(d.ipid) html += '<span>' + esc(d.ipid) + '</span>';
+  if(d.ipid) html += '<span>ID <b>' + esc(d.ipid) + '</b></span>';
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
