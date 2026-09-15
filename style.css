@@ -385,7 +385,7 @@ a{color:inherit; touch-action: manipulation;}
 .name-banner button{flex:none;}
 
 @media(min-width:640px){
-  .topbar,.content{padding-left:28px;padding-right:28px;}
+  .topbar,.content{padding-left:28px;padding-right:28px; align-items: center;}
 }
 
 /* Narrow phones: "Field Tech/Install" is the longest label in the app —
@@ -394,7 +394,7 @@ a{color:inherit; touch-action: manipulation;}
 @media(max-width:420px){
   .sev-btn,.own-btn{padding:6px 3px;font-size:11px;line-height:1.25;}
   }
-  
+
 /* Narrow phones: give the title/subtitle the entire top row to itself,
    and drop the logo + action buttons (Export Report, theme toggle, etc.)
    to a second row below. Pure reordering via flexbox "order" — works
@@ -402,5 +402,5 @@ a{color:inherit; touch-action: manipulation;}
    specific buttons exist there, only on .topbar-titles being present.
    Desktop/tablet keep the original single-row layout untouched. */
 @media(max-width:480px){
-  .topbar-titles{order:-1;flex:1 1 100%;margin-bottom:6px;}
+  .topbar-titles{order:-1;flex:1 1 100%;margin-bottom:6px; align-items: center;}
 }
