@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // Project picker — lists every project in the database and links
 // into index.html?project=<id> for the one the person picks.
-// Load order: config.js, then this file.
+// Load order: config.js (defines SYNC_API_BASE, REGIONS), then this file.
 // ─────────────────────────────────────────────────────────────
 
 let allProjects = [];
 let searchQuery = '';
-let activeRegions =[];
+let activeRegion = '';   // '' = all regions; resets on every page load
 const UNSPECIFIED = 'Unspecified';
 
 function syncConfigured(){
@@ -24,46 +24,42 @@ function matchesSearch(text){
   return String(text || '').toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1;
 }
 
+// Defensive against every falsy-ish region value a project might have —
+// real null, JS undefined, or (seen in the wild) the literal string
+// "undefined" coming back from an older row that predates this column.
+// Anything that isn't a real region name from REGIONS collapses to the
+// same "Unspecified" bucket instead of leaking a raw value into the UI.
 function projectRegion(p){
-  return p.region || UNSPECIFIED;
+  const r = p.region;
+  if(!r || r === 'undefined' || r === 'null') return UNSPECIFIED;
+  return r;
 }
 
-// Chip list: every region in REGIONS (config.js), in that fixed order,
-// plus "Unspecified" at the end if any project actually lacks a refion.
-// Regions with zero projects still show, an empty region is worth seeing
-function regionsForChips(){
+// Dropdown options: every region in REGIONS (config.js), in that fixed
+// order, plus "Unspecified" at the end if any project actually falls
+// into that bucket. Regions with zero projects still show — an empty
+// region is a real state worth seeing, not something to hide.
+function regionsForFilter(){
   const list = (typeof REGIONS !== 'undefined' ? REGIONS.slice() : []);
-  if(allProjects.some(function(p){ return !p.region; }))
-    list.push(UNSPECIFIED);
+  if(allProjects.some(function(p){ return projectRegion(p) === UNSPECIFIED; })) list.push(UNSPECIFIED);
   return list;
 }
 
-function renderRegionChips(){
-  const row = document.getElementById('regionFilterRow');
-  if(!row) return;
-  const regions = regionsForChips();
-  let html = '<button class="chip' + (activeRegions.length===0 ? ' active' : '') + '" data-region="">All</button>';
-  regions.forEach(function(r){
-    const isActive = activeRegions.indexOf(r) !== -1;
-    html += '<button class="chip' + (isActive ? ' active' : '') + '" data-region="' + esc(r) + '">' + esc(r) + '</button>';
-  });
-  row.innerHTML = html;
+function renderRegionFilter(){
+  const select = document.getElementById('regionFilter');
+  if(!select) return;
+  const regions = regionsForFilter();
+  select.innerHTML = '<option value="">All regions</option>' +
+    regions.map(function(r){
+      return '<option value="' + esc(r) + '"' + (activeRegion===r?' selected':'') + '>' + esc(r) + '</option>';
+    }).join('');
 }
 
 document.addEventListener('DOMContentLoaded', function(){
-  const row = document.getElementById('regionFilterRow');
-  if(row){
-    row.addEventListener('click', function(e){
-      const chip = e.target.closest('[data-region]');
-      if(!chip) return;
-      const region = chip.getAttribute('data-region');
-      if(region === ''){
-        activeRegions = [];
-      } else {
-        const idx = activeRegions.indexOf(region);
-        if(idx === -1) activeRegions.push(region); else activeRegions.splice(idx, 1);
-      }
-      renderRegionChips();
+  const select = document.getElementById('regionFilter');
+  if(select){
+    select.addEventListener('change', function(e){
+      activeRegion = e.target.value;
       render();
     });
   }
@@ -84,8 +80,8 @@ function render(){
   if(searchQuery.trim()){
     list = list.filter(function(p){ return matchesSearch(p.name) || matchesSearch(p.shortName); });
   }
-  if(activeRegions.length){
-    list = list.filter(function(p){ return activeRegions.indexOf(projectRegion(p)) !== -1; });
+  if(activeRegion){
+    list = list.filter(function(p){ return projectRegion(p) === activeRegion; });
   }
 
   if(!list.length){
@@ -98,17 +94,12 @@ function render(){
     return;
   }
 
-  // Group by region only when more than one region is actually present
-  // in the filtered setm a single-region view (or a fully filtered-down
-  // one) doesn't need a redundant header repeating whatr the chips already say
-const byRegion = {};
+  const byRegion = {};
   list.forEach(function(p){
     const r = projectRegion(p);
     if(!byRegion[r]) byRegion[r] = [];
     byRegion[r].push(p);
   });
-  const regionKeys = Object.keys(byRegion);
-  const showHeaders = regionKeys.length > 1;
 
   function cardHtml(p){
     return '<a class="loc-card" href="index.html?project=' + encodeURIComponent(p.id) + '" style="text-decoration:none;display:block;">'
@@ -117,15 +108,26 @@ const byRegion = {};
       + '</a>';
   }
 
+  // One region selected (via dropdown, or only one region present after
+  // search) → skip the heading entirely, it'd just repeat what's already
+  // selected. Otherwise, a bold loc-header per region — reusing the same
+  // h2 + meta styling as the location-detail page, so it reads as an
+  // actual section heading rather than the small uppercase project-count
+  // label used elsewhere on this page.
+  const regionKeys = Object.keys(byRegion);
   let html = '';
-  if(!showHeaders){
-    html += '<div class="section-label">' + list.lenth + ' project' + (list.length===1?'':'s') + '</div>';
+  if(regionKeys.length <= 1){
+    html += '<div class="section-label">' + list.length + ' project' + (list.length===1?'':'s') + '</div>';
     html += '<div class="loc-grid">' + list.map(cardHtml).join('') + '</div>';
   } else {
-    const orderedRegions = (typeof REGIONS !== 'undefined' ? REGIONS.slice() : []).concat([UNSPECIFIED]).filter(function(r){ return byRegion[r]; });
-    orderedRegions.forEach(function(r){
+    const orderedRegions = (typeof REGIONS !== 'undefined' ? REGIONS.slice() : []).concat([UNSPECIFIED])
+      .filter(function(r){ return byRegion[r]; });
+    orderedRegions.forEach(function(r, idx){
       const projs = byRegion[r];
-      html += '<div class="section-label">' + esc(r) + ' &middot; ' + projs.length + ' project' + (projs.length===1?'':'s') + '</div>';
+      html += '<div class="loc-header"' + (idx===0 ? '' : ' style="margin-top:26px;"') + '>'
+        + '<h2>' + esc(r) + '</h2>'
+        + '<div class="meta">' + projs.length + ' project' + (projs.length===1?'':'s') + '</div>'
+        + '</div>';
       html += '<div class="loc-grid">' + projs.map(cardHtml).join('') + '</div>';
     });
   }
@@ -141,7 +143,7 @@ async function loadProjects(){
     if(!res.ok) throw new Error('Request failed (' + res.status + ')');
     const data = await res.json();
     allProjects = data.projects || [];
-    renderRegionChips();
+    renderRegionFilter();
     render();
   }catch(e){
     console.error(e);

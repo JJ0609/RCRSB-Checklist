@@ -622,5 +622,5 @@ document.getElementById('createBtn').addEventListener('click', async function(){
     }).catch(function(){ /* showGate already called by adminFetch on 401 */ });
   }
   document.getElementById('newRegion').innerHTML = '<option value="" disabled selected>Select a region...</option>' +
-  REGIONS.map(function(r){ return 'option value="' + esc(r) + '">' + esc(r) + '</option>';}).join('');
+  REGIONS.map(function(r){ return '<option value="' + esc(r) + '">' + esc(r) + '</option>';}).join('');
 })();
