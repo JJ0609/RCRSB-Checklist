@@ -198,6 +198,7 @@ a{color:inherit; touch-action: manipulation;}
 }
 .projects-link{color:inherit;text-decoration:none;}
 .projects-link:hover{text-decoration:underline;}
+.topbar-actions{display:flex;align-items:center;gap:8px;flex:none;}
 .tech-chip{
   flex:none;background:var(--topbar-overlay-1);border:1px solid var(--topbar-border-2);
   color:var(--topbar-text);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;
@@ -385,7 +386,7 @@ a{color:inherit; touch-action: manipulation;}
 .name-banner button{flex:none;}
 
 @media(min-width:640px){
-  .topbar,.content{padding-left:28px;padding-right:28px; align-items: center;}
+  .topbar,.content{padding-left:28px;padding-right:28px;}
 }
 
 /* Narrow phones: "Field Tech/Install" is the longest label in the app —
@@ -393,7 +394,7 @@ a{color:inherit; touch-action: manipulation;}
    lines cleanly instead of looking cramped at the default padding/size. */
 @media(max-width:420px){
   .sev-btn,.own-btn{padding:6px 3px;font-size:11px;line-height:1.25;}
-  }
+}
 
 /* Narrow phones: give the title/subtitle the entire top row to itself,
    and drop the logo + action buttons (Export Report, theme toggle, etc.)
@@ -402,5 +403,6 @@ a{color:inherit; touch-action: manipulation;}
    specific buttons exist there, only on .topbar-titles being present.
    Desktop/tablet keep the original single-row layout untouched. */
 @media(max-width:480px){
-  .topbar-titles{order:-1;flex:1 1 100%;margin-bottom:6px; align-items: center;}
+  .topbar-row{justify-content:space-between;}
+  .topbar-titles{order:-1;flex:1 1 100%;margin-bottom:6px;text-align:center;}
 }
