@@ -25,6 +25,15 @@ let DEVICE_BY_ID = {};
 let checklist = {};   // deviceId -> {power,network,function}
 let punches = [];     // {id, deviceId, deviceName, location, description, severity, status, Ownership, reportedBy, createdAt, resolvedBy, resolvedAt}
 let techName = localStorage.getItem('pd_tech_name') || '';
+if(!techName){
+  try{
+    const storedEmail = localStorage.getItem('pd_user_email');
+    if(storedEmail){
+      techName = storedEmail;
+      localStorage.setItem('pd_tech_name', techName);
+    } 
+  }catch(e){}
+}
 let view = 'locations';
 let currentLocation = null;
 let searchQuery = '';
@@ -644,7 +653,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:M1');
+    ws.mergeCells('A1:O1');
     const title = ws.getCell('A1');
     title.value = projectDisplayName + ' — Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -653,7 +662,7 @@ async function exportDeviceReport(){
     // "Device ID" is the stable join key for re-importing this file later
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
-    const deviceHeaders = ['Device ID','Location','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Note'];
+    const deviceHeaders = ['Device ID','Location','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note'];
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
@@ -685,13 +694,22 @@ async function exportDeviceReport(){
         cell.fill = xlFill(st.bg);
         cell.font = {bold:true, color:{argb: st.txt}};
       });
-      const noteCell = row.getCell(13);
+      // Audit trail: who last touched a Power/Network/Function check on
+      // this device, and when, this is the accountability record for
+      // the exported sheet, not just a snapshot of the current status.
+      const updByCell = row.getCell(13);
+      updByCell.value = c.updatedBy || '';
+      updByCell.fill = xlFill(band);
+      const updAtCell = row.getCell(14);
+      updAtCell.value = c.updatedAt || '';
+      updAtCell.fill = xlFill(band);
+      const noteCell = row.getCell(15);
       noteCell.value = d.note || '';
       noteCell.fill = xlFill(band);
       r++;
     });
 
-    ws.columns = [{width:20},{width:26},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:30}];
+    ws.columns = [{width:20},{width:26},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30}];
     ws.views = [{state:'frozen', ySplit:3}];
 
     // ---- Sheet 2: Punch List ----

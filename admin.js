@@ -59,6 +59,7 @@ function showPanel(){
   document.getElementById('gate').hidden = true;
   document.getElementById('panel').hidden = false;
   loadProjectList();
+  loadAccessList();
 }
 
 async function tryUnlock(password){
@@ -88,18 +89,20 @@ async function loadProjectList(){
   const el = document.getElementById('projectList');
   el.textContent = 'Loading…';
   try{
-    const url = SYNC_API_BASE.replace(/\/$/, '') + '/api/projects';
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await adminFetch('/api/projects', {method: 'GET'});
     const projects = data.projects || [];
+    window._pdProjects = projects; // stashed for the access-grant dropdown
+    populateGrantProjectDropdown(projects);
     if(!projects.length){
       el.innerHTML = '<div class="field-hint">No projects yet.</div>';
       return;
     }
     el.innerHTML = projects.map(function(p){
+      const emails = Array.isArray(p.allowedEmails) ? p.allowedEmails : [];
+      const accessSummary = emails.length ? ('Visible to ' + emails.length + ' email' + (emails.length===1?'':'s')) : 'Visible to everyone';
       return '<div class="admin-row">'
         + '<div><div class="name">' + esc(p.name) + '</div>'
-        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + '</div>'
+        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + ' &middot; ' + esc(accessSummary) + '</div>'
         + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
         + '<div style="display:flex;gap:8px;flex:none;">'
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
@@ -113,6 +116,14 @@ async function loadProjectList(){
   }catch(e){
     el.innerHTML = '<div class="field-hint">Couldn\'t load the project list.</div>';
   }
+}
+
+function populateGrantProjectDropdown(projects){
+  const sel = document.getElementById('grantProject');
+  if(!sel) return;
+  sel.innerHTML = projects.map(function(p){
+    return '<option value="' + esc(p.id) + '">' + esc(p.name) + ' (' + esc(p.id) + ')</option>';
+  }).join('');
 }
 
 document.getElementById('projectList').addEventListener('click', async function(e){
@@ -243,6 +254,134 @@ document.getElementById('projectList').addEventListener('change', async function
     btn.disabled = false;
     btn.textContent = originalLabel;
     fileInput.value = '';
+     }
+});
+// ---------- project access (who sees what) ----------
+async function loadAccessList(){
+  const el = document.getElementById('accessList');
+  el.textContent = 'Loading…';
+  try{
+    const data = await adminFetch('/api/admin/access', {method: 'GET'});
+    const rows = data.access || [];
+    if(!rows.length){
+      el.innerHTML = '<div class="field-hint">No grants yet — every project is visible to everyone.</div>';
+      return;
+    }
+    el.innerHTML = rows.map(function(r){
+      return '<div class="admin-row">'
+        + '<div><div class="name">' + esc(r.email) + '</div>'
+        + '<div class="meta">' + esc(r.projectName) + ' (' + esc(r.projectId) + ') &middot; added by ' + esc(r.addedBy || '') + '</div></div>'
+        + '<button class="btn" data-revoke-project="' + esc(r.projectId) + '" data-revoke-email="' + esc(r.email) + '" style="border-color:var(--fail);color:var(--fail);">Revoke</button>'
+        + '</div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML = '<div class="field-hint">Couldn\'t load the access list.</div>';
+  }
+}
+document.getElementById('grantBtn').addEventListener('click', async function(){
+  const emailInput = document.getElementById('grantEmail');
+  const projectSel = document.getElementById('grantProject');
+  const email = emailInput.value.trim().toLowerCase();
+  const projectId = projectSel.value;
+  const msgEl = document.getElementById('accessMsg');
+  if(!email){ showMsg(msgEl, 'Enter an email or *@domain.com wildcard.', 'err'); return; }
+  if(!projectId){ showMsg(msgEl, 'No project selected.', 'err'); return; }
+  this.disabled = true;
+  try{
+    await adminFetch('/api/admin/access/grant', {
+      method: 'POST',
+      body: JSON.stringify({projectId: projectId, email: email, actorName: 'Admin'})
+    });
+    showMsg(msgEl, 'Granted.', 'ok');
+    emailInput.value = '';
+    loadAccessList();
+    loadProjectList();
+  }catch(e){
+    showMsg(msgEl, e.message || 'Could not grant access.', 'err');
+  }finally{
+    this.disabled = false;
+  }
+});
+document.getElementById('accessList').addEventListener('click', async function(e){
+  const btn = e.target.closest('[data-revoke-project]');
+  if(!btn) return;
+  const projectId = btn.getAttribute('data-revoke-project');
+  const email = btn.getAttribute('data-revoke-email');
+  if(!confirm('Revoke ' + email + '\'s access to "' + projectId + '"?')) return;
+  btn.disabled = true;
+  try{
+    await adminFetch('/api/admin/access/revoke', {method: 'POST', body: JSON.stringify({projectId: projectId, email: email})});
+    loadAccessList();
+    loadProjectList();
+  }catch(e){
+    alert('Could not revoke: ' + e.message);
+    btn.disabled = false;
+  }
+});
+// Reads a CSV or xlsx with "email" and "project id" columns (matched by
+// header text, same approach as everywhere else in this file — tolerant
+// of column order, not of a missing/differently-worded header).
+function parseAccessSheet(workbook){
+  const sheetName = workbook.SheetNames[0];
+  if(!sheetName) throw new Error('No sheet found in this file.');
+  const ws = workbook.Sheets[sheetName];
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  let headerRow = null, cols = {};
+  for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 5); r++){
+    const found = {};
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({r, c})];
+      const h = normalizeHeader(cell ? cell.v : '');
+      if(h === 'email' || h === 'emailaddress') found.email = c;
+      else if(h === 'projectid' || h === 'project' || h === 'id') found.projectId = c;
+    }
+    if(found.email !== undefined && found.projectId !== undefined){ headerRow = r; cols = found; break; }
+  }
+  if(headerRow === null){
+    throw new Error('Couldn\'t find both an "email" and a "project id" column. Sheet names in this file: ' + workbook.SheetNames.join(', '));
+  }
+  const cellStr = function(r, c){
+    const cell = ws[XLSX.utils.encode_cell({r, c})];
+    return cell && cell.v != null ? String(cell.v).trim() : '';
+  };
+  const rows = [];
+  for(let r = headerRow + 1; r <= range.e.r; r++){
+    const email = cellStr(r, cols.email);
+    const projectId = cellStr(r, cols.projectId);
+    if(!email && !projectId) continue;
+    rows.push({email: email.toLowerCase(), projectId: projectId.toLowerCase()});
+  }
+  if(!rows.length) throw new Error('No rows found below the header.');
+  return rows;
+}
+document.getElementById('accessFile').addEventListener('change', async function(e){
+  const file = e.target.files[0];
+  const msgEl = document.getElementById('accessMsg');
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ showMsg(msgEl, 'The file-parsing library didn\'t load — check your connection and reload this page.', 'err'); e.target.value=''; return; }
+  try{
+    showMsg(msgEl, 'Reading file…', 'info');
+    const buf = await file.arrayBuffer();
+    const workbook = XLSX.read(buf, {type: 'array'});
+    const rows = parseAccessSheet(workbook);
+    showMsg(msgEl, 'Uploading ' + rows.length + ' grants…', 'info');
+    const result = await adminFetch('/api/admin/access/import', {
+      method: 'POST',
+      body: JSON.stringify({rows: rows, actorName: 'Admin'})
+    });
+    showMsg(msgEl,
+      'Granted ' + result.granted + ' new access row' + (result.granted===1?'':'s') +
+      (result.skippedUnknownProject ? ' — skipped ' + result.skippedUnknownProject + ' row(s) with an unrecognized project id' : '') +
+      (result.skippedBadEmail ? ' — skipped ' + result.skippedBadEmail + ' row(s) with a bad email' : '') + '.',
+      'ok'
+    );
+    loadAccessList();
+    loadProjectList();
+  }catch(err){
+    console.error(err);
+    showMsg(msgEl, err.message || 'Could not import.', 'err');
+  }finally{
+    e.target.value = '';
   }
 });
 

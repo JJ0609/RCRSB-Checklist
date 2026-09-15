@@ -11,6 +11,19 @@
   }catch(e){}
 })();
 </script>
+<script>
+// Mandatory login gate - no page here is reachable without an email on file.
+// No real security (no password needed), but every action needs a real
+// identity attached, and the project picker needs to know whos asking.
+(function(){
+  try{
+    if(!localStorage.getItem('pd_user_email')){
+      var here = window.location.pathname.split('/').pop() + window.location.search;
+      window.location.replace('login.html?redirect=' + encodeURIComponent(here));
+    }
+  }catch(e){}
+})();
+</script>
 <title>Admin — Power Design Commissioning</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
