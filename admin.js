@@ -190,7 +190,7 @@ document.getElementById('projectList').addEventListener('change', async function
         ', ' + result.checklistUpdated + ' checklist row' + (result.checklistUpdated===1?'':'s') +
         ', ' + result.punchesUpdated + ' punch update' + (result.punchesUpdated===1?'':'s') +
         ', ' + result.punchesCreated + ' new punch item' + (result.punchesCreated===1?'':'s') + '.';
-      loadProjectList();
+      setTimeout(loadProjectList, 5000);
     }catch(e){
       console.error(e);
       if(statusEl) statusEl.textContent = '';
@@ -234,7 +234,7 @@ document.getElementById('projectList').addEventListener('change', async function
       body: JSON.stringify({id: id, devices: devices})
     });
     if(statusEl) statusEl.textContent = 'Updated ' + result.deviceCount + ' devices just now.';
-    loadProjectList();
+    setTimeout(loadProjectList, 5000);
   }catch(e){
     console.error(e);
     if(statusEl) statusEl.textContent = '';
