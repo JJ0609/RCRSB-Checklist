@@ -271,7 +271,7 @@ function deviceCardHtml(d, showLocation){
     devicePunches.forEach(function(p){
       const st = p.status === 'resolved' ? {bg:'var(--pass-bg)', txt:'var(--pass)'}
         : p.severity === 'critical' ? {bg:'var(--fail-bg)', txt:'var(--fail)'}
-        : p.severity === 'major' ? {bg:'var(--open-bg)', txt:'var(--open)'}
+        : p.severity === 'major' ? {bg:'var(--major-bg)', txt:'var(--major)'}
         : {bg:'var(--pending-bg)', txt:'var(--pending)'};
       html += '<div style="font-size:11.5px;display:flex;justify-content:space-between;gap:6px;align-items:center;background:'
         + st.bg + ';border-radius:7px;padding:5px 8px;">'

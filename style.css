@@ -32,6 +32,8 @@ img{max-width:100%}
   --pending-bg:#F1EBE3;
   --open:#B5620A;
   --open-bg:#FCEEDD;
+  --major:#CC5500;
+  --major-bg:#E86100;
   --own-field:#0E7C71;
   --own-field-bg:#DFF5F2;
   --own-programming:#6B3FC2;
@@ -75,6 +77,8 @@ img{max-width:100%}
     --pending-bg:#2A2620;
     --open:#E8A244;
     --open-bg:#3A2A10;
+    --major:#FF4500;
+    --major-bg:#FF9F00;
     --own-field:#4FD9C7;
     --own-field-bg:#123B37;
     --own-programming:#B79AF0;
@@ -115,6 +119,8 @@ img{max-width:100%}
   --pending-bg:#2A2620;
   --open:#E8A244;
   --open-bg:#3A2A10;
+  --major:#CC5500;
+  --major-bg:#E86100;
   --own-field:#4FD9C7;
   --own-field-bg:#123B37;
   --own-programming:#B79AF0;
@@ -310,7 +316,7 @@ a{color:inherit; touch-action: manipulation;}
 .sev-row{display:flex;gap:6px;}
 .sev-btn{flex:1;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);padding:6px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-soft);}
 .sev-btn.sel[data-sev="minor"]{background:var(--pending-bg);border-color:var(--pending);color:var(--ink);}
-.sev-btn.sel[data-sev="major"]{background:var(--open-bg);border-color:var(--open);color:var(--open);}
+.sev-btn.sel[data-sev="major"]{background:var(--major-bg);border-color:var(--major);color:var(--major);}
 .sev-btn.sel[data-sev="critical"]{background:var(--fail-bg);border-color:var(--fail);color:var(--fail);}
 
 .own-btn{flex:1;border-radius:8px;border:1.5px solid var(--border);background:var(--surface);padding:6px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-soft);}
@@ -348,7 +354,7 @@ a{color:inherit; touch-action: manipulation;}
 }
 .sev-stripe{width:4px;border-radius:3px;flex:none;}
 .sev-stripe.minor{background:var(--pending);}
-.sev-stripe.major{background:var(--open);}
+.sev-stripe.major{background:var(--major);}
 .sev-stripe.critical{background:var(--fail);}
 .own-stripe{width:4px;border-radius:3px;flex:none;}
 .own-stripe[data-own="Field Tech/Install"]{background:var(--own-field);}
