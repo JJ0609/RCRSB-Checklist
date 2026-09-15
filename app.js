@@ -140,8 +140,6 @@ function renderStats(){
   document.getElementById('statBar').style.width = (s.total? (100*s.tested/s.total):0) + '%';
   document.getElementById('statOpen').textContent = s.open;
   document.getElementById('statFail').textContent = s.failChecks;
-  const chip = document.getElementById('techChip');
-  chip.textContent = techName ? ('Testing as ' + techName) : 'Set your name';
 }
 
 function matchesSearch(text){
@@ -931,14 +929,6 @@ document.querySelectorAll('.stat.clickable').forEach(function(el){
   el.addEventListener('keydown', function(e){
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); el.click(); }
   });
-});
-document.getElementById('techChip').addEventListener('click', function(){
-  const name = prompt('Your name (shown on checklist updates and punch items):', techName || '');
-  if(name !== null){
-    techName = name.trim();
-    localStorage.setItem('pd_tech_name', techName);
-    renderStats();
-  }
 });
 
 // ---------- boot ----------
