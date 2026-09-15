@@ -86,6 +86,15 @@
           <div class="field-hint">Lowercase letters, numbers, and hyphens only. Auto-filled from the name — edit if you want something different. Can't be changed after creation.</div>
         </div>
         <div class="field">
+          <label for="newRegion">Project Region</label>
+          <select id="newRegion">
+            <option value="" disabled selected>Select a region&hellip;</option>
+            <option value="Florida">FLorida</option>
+            <option value="Mid-Atlantic">Mid-Atlantic</option>
+            <option value="West">West</option>
+          </select>
+        </div>
+        <div class="field">
           <label for="newFile">Info Sheet (.xlsx)</label>
           <input type="file" id="newFile" accept=".xlsx">
           <div class="field-hint">Same format as your existing projects: a "Device Info" sheet plus one "Port Map | &lt;switch&gt;" sheet per switch.</div>

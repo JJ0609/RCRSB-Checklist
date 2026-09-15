@@ -565,6 +565,7 @@ document.getElementById('createBtn').addEventListener('click', async function(){
   const name = document.getElementById('newName').value.trim();
   const shortName = document.getElementById('newShort').value.trim();
   const id = document.getElementById('newId').value.trim().toLowerCase();
+  const region = document.getElementById('newRegion').value.trim();
   const fileInput = document.getElementById('newFile');
   const file = fileInput.files[0];
 
@@ -587,13 +588,14 @@ document.getElementById('createBtn').addEventListener('click', async function(){
     showMsg(msgEl, 'Uploading ' + devices.length + ' devices…', 'info');
     const result = await adminFetch('/api/admin/projects', {
       method: 'POST',
-      body: JSON.stringify({id: id, name: name, shortName: shortName, devices: devices})
+      body: JSON.stringify({id: id, name: name, shortName: shortName, region: region, devices: devices})
     });
 
     showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' devices.', 'ok');
     document.getElementById('newName').value = '';
     document.getElementById('newShort').value = '';
     document.getElementById('newId').value = '';
+    document.getElementById('newRegion').value = '';
     idManuallyEdited = false;
     fileInput.value = '';
     loadProjectList();
@@ -619,4 +621,6 @@ document.getElementById('createBtn').addEventListener('click', async function(){
       showPanel();
     }).catch(function(){ /* showGate already called by adminFetch on 401 */ });
   }
+  document.getElementById('newRegion').innerHTML = '<option value="" disabled selected>Select a region...</option>' +
+  REGIONS.map(function(r){ return 'option value="' + esc(r) + '">' + esc(r) + '</option>';}).join('');
 })();

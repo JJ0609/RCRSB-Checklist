@@ -5,3 +5,4 @@
 // ─────────────────────────────────────────────────────────────
 const SYNC_API_BASE = "https://rcrsb-commissioning-sync.jjcampbell06092004.workers.dev/";
 const SYNC_POLL_MS = 5000;
+const REGIONS = ['Florida', 'Mid-Atlantic', 'West'];
