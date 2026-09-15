@@ -601,6 +601,27 @@ const XL_COLORS = {
   OWN_CONFIG_BG: 'FFFBF1D2', OWN_CONFIG_TXT: 'FF8A6D14'
 };
 function xlFill(argb){ return {type:'pattern', pattern:'solid', fgColor:{argb: argb}}; }
+
+// Every timestamp is stored as UTC (new Date().toISOString() in the
+// Worker) — correct for storage, but not what anyone wants to read in a
+// spreadsheet. This converts to US Eastern time for display in the
+// export only; the underlying stored data stays UTC. Uses the real
+// America/New_York timezone rules (not a fixed -5), so it correctly
+// shows EDT in summer and EST in winter instead of being an hour off
+// half the year.
+function formatEasternTime(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return iso;
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+      timeZoneName: 'short'
+    }).format(d);
+  }catch(e){ return iso; }
+}
 function checkCellStyle(v){
   if(v === 'pass') return {label:'Pass', bg: XL_COLORS.PASS_BG, txt: XL_COLORS.PASS_TXT};
   if(v === 'fail') return {label:'Fail', bg: XL_COLORS.FAIL_BG, txt: XL_COLORS.FAIL_TXT};
@@ -699,7 +720,7 @@ async function exportDeviceReport(){
       updByCell.value = c.updatedBy || '';
       updByCell.fill = xlFill(band);
       const updAtCell = row.getCell(14);
-      updAtCell.value = c.updatedAt || '';
+      updAtCell.value = formatEasternTime(c.updatedAt);
       updAtCell.fill = xlFill(band);
       const noteCell = row.getCell(15);
       noteCell.value = d.note || '';
@@ -768,7 +789,7 @@ async function exportDeviceReport(){
       statCell.font = {bold:true, color:{argb: statStyle.txt}};
 
       // reportedBy: the tech who submitted this punch item
-      const tailVals = [p.reportedBy || '', p.createdAt || '', p.resolvedBy || '', p.resolvedAt || ''];
+      const tailVals = [p.reportedBy || '', formatEasternTime(p.createdAt), p.resolvedBy || '', formatEasternTime(p.resolvedAt)];
       tailVals.forEach(function(v, i){
         const cell = row.getCell(9+i);
         cell.value = v;
