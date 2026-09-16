@@ -283,17 +283,18 @@ function deviceCardHtml(d, showLocation){
   }
   if(openPunchFormFor === d.id){
 
-      // Source - https://stackoverflow.com/a/18141831
-      // Posted by Robin Drexler, modified by community. See post 'Timeline' for change history
+      // Source - https://stackoverflow.com/a/18141908
+      // Posted by Manish Chauhan
       // Retrieved 2026-09-16, License - CC BY-SA 3.0
 
-      window.addEventListener('pagehide', function() {
-          return '"Changes not saved, are you sure you want to leave? *PAGEHIDE*"';
-      }); 
-
-      window.addEventListener('unload', function() {
-          return '"Changes not saved, are you sure you want to leave? *UNLOAD*"';
-      }); 
+      window.onbeforeunload = function() {
+        return "Changes not saved, are you sure you want to leave?";
+      };
+      $(document).ready(function() {
+        $('a[rel!=ext]').click(function() {
+          window.onbeforeunload = null;
+        });
+      });
 
     html += '<div class="punch-form">'
       + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
