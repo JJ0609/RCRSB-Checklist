@@ -289,20 +289,10 @@ function deviceCardHtml(d, showLocation){
 }
 
   function closeForm() {
-    // This ensures that NEXT time they try to close the tab, they won't get a prompt
     window.removeEventListener("beforeunload", preventNavigation); 
-    hideFormUi(); 
 }
 
   if(openPunchFormFor === d.id){
-
-
-    if(openPunchFormFor === d.id){
-      window.addEventListener("beforeunload", preventNavigation);
-
-      document.getElementById('cancelPunch').addEventListener('click', closeForm);
-      document.getElementById('submitPunch').addEventListener('click', closeForm);
-    }
 
     html += '<div class="punch-form">'
       + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
@@ -316,6 +306,11 @@ function deviceCardHtml(d, showLocation){
       + '<button class="btn ghost" id="cancelPunch">Cancel</button>'
       + '<button class="btn primary" id="submitPunch" data-device="' + esc(d.id) + '">Log punch item</button>'
       + '</div></div>';
+
+      window.addEventListener("beforeunload", preventNavigation);
+
+      document.getElementById('cancelPunch').addEventListener('click', closeForm);
+      document.getElementById('submitPunch').addEventListener('click', closeForm);
    } else {
     html += '<button class="punch-add-btn" data-device="' + esc(d.id) + '">+ Add punch item</button>';
   }
