@@ -281,13 +281,28 @@ function deviceCardHtml(d, showLocation){
     });
     html += '</div>';
   }
+
+  function preventNavigation(e) {
+    e.preventDefault();
+    e.returnValue = "Are you sure you want to leave? Your changes may not be saved.";
+    return e.returnValue;
+}
+
+  function closeForm() {
+    // This ensures that NEXT time they try to close the tab, they won't get a prompt
+    window.removeEventListener("beforeunload", preventNavigation); 
+    hideFormUi(); 
+}
+
   if(openPunchFormFor === d.id){
 
-    window.addEventListener("beforeunload", function(e){
-      e.preventDefault();
-    });
 
-    
+    if(openPunchFormFor === d.id){
+      window.addEventListener("beforeunload", preventNavigation);
+
+      document.getElementById('cancelPunch').addEventListener('click', closeForm);
+      document.getElementById('submitPunch').addEventListener('click', closeForm);
+    }
 
     html += '<div class="punch-form">'
       + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
