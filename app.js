@@ -306,16 +306,18 @@ function deviceCardHtml(d, showLocation){
       + '<button class="btn ghost" id="cancelPunch">Cancel</button>'
       + '<button class="btn primary" id="submitPunch" data-device="' + esc(d.id) + '">Log punch item</button>'
       + '</div></div>';
-
-      window.addEventListener("beforeunload", preventNavigation);
-
-      document.getElementById('cancelPunch').addEventListener('click', closeForm);
-      document.getElementById('submitPunch').addEventListener('click', closeForm);
    } else {
     html += '<button class="punch-add-btn" data-device="' + esc(d.id) + '">+ Add punch item</button>';
   }
   html += '</div>';
   return html;
+}
+
+if(openPunchFormFor === d.id){
+      window.addEventListener("beforeunload", preventNavigation);
+
+      document.getElementById('cancelPunch').addEventListener('click', closeForm);
+      document.getElementById('submitPunch').addEventListener('click', closeForm);
 }
 
 function renderPunchList(){
