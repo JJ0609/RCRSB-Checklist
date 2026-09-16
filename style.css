@@ -193,6 +193,7 @@ a{color:inherit; touch-action: manipulation;}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .topbar-titles .sub{
+/*font-size was 11.5 might need to switch back, works decent bt looks a bit big on PC/laptop plus leads to name cut-off on mobile*/
   font-size:15px;color:var(--topbar-text-soft);letter-spacing:.03em;text-transform:uppercase;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
