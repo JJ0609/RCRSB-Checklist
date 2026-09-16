@@ -283,18 +283,11 @@ function deviceCardHtml(d, showLocation){
   }
   if(openPunchFormFor === d.id){
 
-      // Source - https://stackoverflow.com/a/18141908
-      // Posted by Manish Chauhan
-      // Retrieved 2026-09-16, License - CC BY-SA 3.0
+    window.addEventListener("beforeunload", function(e){
+      e.preventDefault();
+    });
 
-      window.onbeforeunload = function() {
-        return "Changes not saved, are you sure you want to leave?";
-      };
-      $(document).ready(function() {
-        $('a[rel!=ext]').click(function() {
-          window.onbeforeunload = null;
-        });
-      });
+    
 
     html += '<div class="punch-form">'
       + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
