@@ -282,6 +282,15 @@ function deviceCardHtml(d, showLocation){
     html += '</div>';
   }
   if(openPunchFormFor === d.id){
+    
+      // Source - https://stackoverflow.com/a/18141831
+      // Posted by Robin Drexler, modified by community. See post 'Timeline' for change history
+      // Retrieved 2026-09-16, License - CC BY-SA 3.0
+
+      window.addEventListener('beforeunload', function() {
+          return '"Changes not saved, are you sure you want to leave?"';
+      }); 
+
     html += '<div class="punch-form">'
       + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
       + '<div class="sev-row">'
@@ -294,24 +303,6 @@ function deviceCardHtml(d, showLocation){
       + '<button class="btn ghost" id="cancelPunch">Cancel</button>'
       + '<button class="btn primary" id="submitPunch" data-device="' + esc(d.id) + '">Log punch item</button>'
       + '</div></div>';
-
-                // Source - https://stackoverflow.com/a/45844767
-          // Posted by Robert Moore
-          // Retrieved 2026-09-16, License - CC BY-SA 3.0
-
-    if (window.history && history.pushState) {
-        addEventListener('load', function() {
-            history.pushState(null, null, null); // creates new history entry with same URL
-            addEventListener('popstate', function() {
-                var stayOnPage = confirm("Changes not saved, are you sure you want to leave?");
-            if (!stayOnPage) {
-              history.back() 
-            } else {
-              history.pushState(null, null, null);
-            }
-          });    
-        });
-      }
    } else {
     html += '<button class="punch-add-btn" data-device="' + esc(d.id) + '">+ Add punch item</button>';
   }
