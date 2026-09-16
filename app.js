@@ -310,14 +310,6 @@ function deviceCardHtml(d, showLocation){
     html += '<button class="punch-add-btn" data-device="' + esc(d.id) + '">+ Add punch item</button>';
   }
   html += '</div>';
-
-  if(openPunchFormFor === d.id){
-      window.addEventListener("beforeunload", preventNavigation);
-
-      document.getElementById('cancelPunch').addEventListener('click', closeForm);
-      document.getElementById('submitPunch').addEventListener('click', closeForm);
-}
-
   return html;
 }
 
