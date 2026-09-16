@@ -560,7 +560,7 @@ function parseWorkbook(workbook){
   // but not typos or renamed sheets — those get a clear error listing what
   // sheet names actually exist, instead of a silent wrong match.
   const normalize = function(n){ return n.replace(/\s+/g, '').toLowerCase(); };
-  const diName = workbook.SheetNames.find(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo'; });
+  const diName = workbook.SheetNames.find(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo' || normalize(n) === 'devicereport'; });
   if(!diName){
     throw new Error(
       'No "Device Info" sheet found. Sheet names in this file: ' +
