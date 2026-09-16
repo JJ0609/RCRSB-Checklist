@@ -282,13 +282,17 @@ function deviceCardHtml(d, showLocation){
     html += '</div>';
   }
   if(openPunchFormFor === d.id){
-    
+
       // Source - https://stackoverflow.com/a/18141831
       // Posted by Robin Drexler, modified by community. See post 'Timeline' for change history
       // Retrieved 2026-09-16, License - CC BY-SA 3.0
 
-      window.addEventListener('beforeunload', function() {
-          return '"Changes not saved, are you sure you want to leave?"';
+      window.addEventListener('pagehide', function() {
+          return '"Changes not saved, are you sure you want to leave? *PAGEHIDE*"';
+      }); 
+
+      window.addEventListener('unload', function() {
+          return '"Changes not saved, are you sure you want to leave? *UNLOAD*"';
       }); 
 
     html += '<div class="punch-form">'
