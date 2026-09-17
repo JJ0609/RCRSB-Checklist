@@ -20,6 +20,7 @@ let currentProject = null;   // set from the ?project= URL param at boot
 let currentProjectMeta = { name: '', shortName: '' };
 let DEVICES = [];
 let LOCATIONS = [];
+let SERVER_LOCATIONS = [];
 let DEVICE_BY_ID = {};
 
 let checklist = {};   // deviceId -> {power,network,function}
@@ -41,6 +42,10 @@ let punchStatusFilter = 'open';
 let punchLocationFilter = '';
 let openPunchFormFor = null;
 let editingPunchId = null;
+let addingLocation = false;
+let locationDraftText = '';
+let addingDeviceFor = null;
+let deviceDraft = {};
 let editDraftText = {};
 let pendingSeverity = 'major';
 let pendingOwnership = 'Field Tech/Install';
@@ -50,6 +55,7 @@ let pollTimer = null;
 
 function rebuildDeviceIndexes(){
   const map = {};
+  SERVER_LOCATIONS.forEach(function(name){ map[name] = map[name] || []; });
   DEVICES.forEach(function(d){
     if(!map[d.location]) map[d.location] = [];
     map[d.location].push(d);
@@ -181,7 +187,21 @@ function renderLocations(){
       + '</button>';
   });
   html += '</div>';
+  if(addingLocation){
+    html += '<div class="punch-form" style="margin-top:12px;">'
+      + '<input id="newLocationName" type="text" placeholder="e.g. Elec 309 | AV Rack 2" value="' + esc(locationDraftText) + '" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);">'
+      + '<div class="form-actions">'
+      + '<button class="btn ghost" id="cancelAddLocation">Cancel</button>'
+      + '<button class="btn primary" id="submitAddLocation">Add location</button>'
+      + '</div></div>';
+  } else {
+    html += '<button class="punch-add-btn" id="addLocationBtn" style="margin-top:12px;">+ Add location</button>';
+  }
   document.getElementById('content').innerHTML = html;
+  if(addingLocation){
+    const inp = document.getElementById('newLocationName');
+    if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
 }
 
 function titleCase(s){
@@ -216,7 +236,45 @@ function renderLocationDetail(){
   html += '<div class="device-list">';
   devices.forEach(function(d){ html += deviceCardHtml(d); });
   html += '</div>';
+
+  if(addingDeviceFor === loc.name){
+    html += addDeviceFormHtml();
+  } else{
+    html +='<button class="punch-add-btn" id="addDeviceBtn" style="margin-top:10px;"> + Add Device</button>';
+  }
   document.getElementById('content').innerHTML = html;
+  if(addingDeviceFor === loc.name){
+    const nameInput = document.getElementById('newDeviceName');
+    if(nameInput) nameInput.focus();
+  }
+}
+
+//All fields are available, but only device name is required
+function deviceDraftField(id, label, placeholder, maxlength){
+  const val = deviceDraft[id] || '';
+  return '<div style="margin-bottom:8px;">'
+    + '<label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:3px;">' + esc(label) + '</label>'
+    + '<input id="newDevice_' + id + '" type="text" placeholder="' + esc(placeholder || '') + '"' + (maxlength ? ' maxlength="' + maxlength + '"' : '') + ' value="' + esc(val) + '" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);">'
+    + '</div>';
+}
+
+function addDeviceFormHtml(){
+  let html = '<div class="punch-form" style="margin-top:10px;">';
+  html += deviceDraftField('name', 'Device Name (Required)', 'e.g. R1-TV1-01');
+  html += deviceDraftField('model', 'Manufacturer | Model', 'e.g. Sony | XR-65X90L');
+  html += deviceDraftField('ip', 'IP Address', 'e.g. 10.0.1.20');
+  html += deviceDraftField('ipid', 'IP ID');
+  html += deviceDraftField('zone', 'Zone');
+  html += deviceDraftField('channel', 'Amp Channel');
+  html += deviceDraftField('status', 'Status');
+  html += deviceDraftField('level', 'Level');
+  html += deviceDraftField('avio', 'AV I/O');
+  html += deviceDraftField('note', 'Note');
+  html += '<div class="form-actions">' 
+  + '<button class="btn ghost" id="cancelAddDevice">Cancel</button>' 
+  + '<button class="btn primary" id="submitAddDevice">Add Device</button>'
+  + '</div></div>';
+  return html;
 }
 
 function renderFailedChecks(){
@@ -405,9 +463,9 @@ async function fetchDevicesAndMeta(){
 function deviceCacheKey(){
   return 'pd_devices_cache_' + currentProject;
 }
-function saveDeviceCache(meta, devices){
+function saveDeviceCache(meta, devices, locations){
   try{
-    localStorage.setItem(deviceCacheKey(), JSON.stringify({meta: meta, devices: devices, cachedAt: new Date().toISOString()}));
+    localStorage.setItem(deviceCacheKey(), JSON.stringify({meta: meta, devices: devices, locations: locations || [], cachedAt: new Date().toISOString()}));
   }catch(e){}
 }
 function loadDeviceCache(){
@@ -439,6 +497,21 @@ async function pushPunch(item){
   });
 }
 
+async function pushAddLocation(name){
+  return apiCall('/api/location', {
+    method: 'POST',
+    body: JSON.stringify({project: currentProject, name: name, actorName: techName || 'Unnamed tech'})
+  });
+}
+
+async function pushAddDevice(fields){
+  return apiCall('/api/device', {
+    method: 'POST',
+    body: JSON.stringify(Object.assign({project: currentProject, actorName: techName || 'Unnamed tech'},
+      fields))
+  });
+}
+
 async function pushToggleResolve(punchId, actorName){
   return apiCall('/api/punch/toggle', {
     method: 'POST',
@@ -461,7 +534,9 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
 // person does something that naturally re-renders (submit, cancel,
 // toggle a check, switch tabs).
 function isComposingPunch(){
-  return document.activeElement && (document.activeElement.id === 'punchDesc' || document.activeElement.id === 'editPunchDesc');
+  const el = document.activeElement;
+  if(!el || !el.id) return false;
+  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id.indexOf('newDevice_') === 0;
 }
 
 async function syncFromRemote(){
@@ -488,6 +563,54 @@ async function syncFromRemote(){
 }
 
 // ---------- writes ----------
+async function submitAddLocation(){
+  const input = document.getElementById('newLocationName');
+  const name = (input ? input.value : locationDraftText).trim();
+  if(!name) return;
+  const btn = document.getElementById('submitAddLocation');
+  if(btn){ btn.disabled = true; btn.textContent = 'Adding...'; }
+  try{
+    const result = await pushAddLocation(name);
+    if(!SERVER_LOCATIONS.includes(result.name)) SERVER_LOCATIONS.push(result.name);
+    addingLocation = false;
+    locationDraftText = '';
+    rebuildDeviceIndexes();
+    renderContent();
+  }catch(e){
+    alert('Could not add location: ' + e.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'Add location'; }
+  }
+}
+
+async function submitAddDevice(){
+  const location = addingDeviceFor;
+  const getVal = function(id){ const el = document.getElementById('newDevice_' + id); return el ? el.value.trim() : ''; };
+  const fields = {
+    location: location,
+    name: getVal('name'), model: getVal('model'), ip: getVal('ip'), ipid: getVal('ipid'),
+    zone: getVal('zone'), channel: getVal('channel'), status: getVal('status'), level: getVal('level'),
+    avio: getVal('avio'), note: getVal('note')
+  };
+  if(!fields.name){ alert('Device name is required.'); return; }
+  const btn = document.getElementById('submitAddDevice');
+  if(btn){ btn.disabled = true; btn.textContent = 'Adding...'; }
+  try{
+    const result = await pushAddDevice(fields);
+    DEVICES.push({
+      id: result.id, name: fields.name, status: fields.status, level: fields.level, location: location,
+      zone: fields.zone, channel: fields.channel, model: fields.model, ip: fields.ip, ipid: fields.ipid,
+      avio: fields.avio, note: fields.note, ports: []
+    });
+    addingDeviceFor = null;
+    deviceDraft = {};
+    rebuildDeviceIndexes();
+    renderContent();
+  }catch(e){
+    alert('Could not add device: ' + e.message);
+    if(btn){ btn.disabled = false; btn.textContent = 'Add device'; }
+  }
+}
+
 function persistChecklist(deviceId){
   saveCache();
 }
@@ -842,6 +965,19 @@ document.getElementById('content').addEventListener('click', function(e){
   const locCard = e.target.closest('[data-loc]');
   if(locCard){ currentLocation = locCard.getAttribute('data-loc'); view = 'location-detail'; searchQuery=''; document.getElementById('searchInput').value=''; renderContent(); return; }
 
+  const addLocationBtn = e.target.closest('#addLocationBtn');
+  if(addLocationBtn){ addingLocation = true; locationDraftText = ''; renderContent(); return; }
+  const cancelAddLocationBtn = e.target.closest('#cancelAddLocation');
+  if(cancelAddLocationBtn){ addingLocation = false; locationDraftText = ''; renderContent(); return; }
+  const submitAddLocationBtn = e.target.closest('#submitAddLocation');
+  if(submitAddLocationBtn){ submitAddLocation(); return; }
+  const addDeviceBtn = e.target.closest('#addDeviceBtn');
+  if(addDeviceBtn){ addingDeviceFor = currentLocation; deviceDraft = {}; renderContent(); return; }
+  const cancelAddDeviceBtn = e.target.closest('#cancelAddDevice');
+  if(cancelAddDeviceBtn){ addingDeviceFor = null; deviceDraft = {}; renderContent(); return; }
+  const submitAddDeviceBtn = e.target.closest('#submitAddDevice');
+  if(submitAddDeviceBtn){ submitAddDevice(); return; }
+
   const backBtn = e.target.closest('#backBtn');
   if(backBtn){ view = 'locations'; renderContent(); return; }
 
@@ -911,6 +1047,10 @@ document.getElementById('content').addEventListener('change', function(e){
 document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id === 'punchDesc' && openPunchFormFor){ punchDraftText[openPunchFormFor] = e.target.value; }
   if(e.target.id === 'editPunchDesc' && editingPunchId){ editDraftText[editingPunchId] = e.target.value; }
+  if(e.target.id === 'newLocationName' && addingLocation){ locationDraftText = e.target.value; }
+  if(e.target.id && e.target.id.indexOf('newDevice_') === 0 && addingDeviceFor){
+    deviceDraft[e.target.id.slice('newDevice_'.length)] = e.target.value;
+  }
 });
 
 document.getElementById('searchInput').addEventListener('input', function(e){
@@ -1006,8 +1146,9 @@ async function boot(){
   try{
     const data = await fetchDevicesAndMeta();
     DEVICES = data.devices || [];
+    SERVER_LOCATIONS = data.locations || [];
     currentProjectMeta = data.project || {name: projectId, shortName: projectId};
-    saveDeviceCache(currentProjectMeta, DEVICES);
+    saveDeviceCache(currentProjectMeta, DEVICES, SERVER_LOCATIONS);
     syncEnabled = true;
     loaded = true;
   }catch(e){
@@ -1015,6 +1156,7 @@ async function boot(){
     const cached = loadDeviceCache();
     if(cached && cached.devices && cached.devices.length){
       DEVICES = cached.devices;
+      SERVER_LOCATIONS = cached.locations || [];
       currentProjectMeta = cached.meta || {name: projectId, shortName: projectId};
       syncEnabled = false;
       loaded = true;
