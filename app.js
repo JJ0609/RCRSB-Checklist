@@ -962,6 +962,18 @@ window.addEventListener('beforeunload', function(e){
   }
 });
 
+//Tries to send an update notification when page is closed
+//Falls back to a single daily update if this fails
+function signalSessionEnd(){
+  if(!syncConfigured()) return;
+  try{
+    navigator.sendBeacon(SYNC_API_BASE.replace(/\/$/, '') + '/api/notify/session-end');
+  }catch(e){
+    //Best effort attempt
+  }
+}
+window.addEventListener('pagehide', signalSessionEnd);
+
 // ---------- boot ----------
 function renderFatalError(title, message){
   document.getElementById('content').innerHTML =
