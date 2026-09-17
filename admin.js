@@ -101,7 +101,7 @@ async function loadProjectList(){
       const emails = Array.isArray(p.allowedEmails) ? p.allowedEmails : [];
       const accessSummary = emails.length ? ('Visible to ' + emails.length + ' email' + (emails.length===1?'':'s')) : 'Visible to everyone';
       return '<div class="admin-row">'
-        + '<div><div class="name">' + esc(p.name) + '</div>'
+        + '<div><div class="name">' + esc(p.name) + (p.archived ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">(Archived)</span>' : '') + '</div>'
         + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + ' &middot; ' + esc(accessSummary) + '</div>'
         + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
         + '<div style="display:flex;gap:8px;flex:none;">'
@@ -109,6 +109,7 @@ async function loadProjectList(){
         + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
         + '<button class="btn" data-update="' + esc(p.id) + '">Update Devices</button>'
         + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
+        + '<button class="btn" data-archive="' + esc(p.id) + '" data-currently-archived="' + (p.archived ? '1' : '0') + '">' + (p.archived ? 'Unarchive' : 'Archive') + '</button>'
         + '<button class="btn" data-delete="' + esc(p.id) + '" style="border-color:var(--fail);color:var(--fail);">Delete</button>'
         + '</div>'
         + '</div>';
@@ -127,6 +128,24 @@ function populateGrantProjectDropdown(projects){
 }
 
 document.getElementById('projectList').addEventListener('click', async function(e){
+  const archiveBtn = e.target.closest('[data-archive]');
+  if(archiveBtn){
+    const id = archiveBtn.getAttribute('data-archive');
+    const currentlyArchived = archiveBtn.getAttribute('data-currently-archived') === '1';
+    const nextArchived = !currentlyArchived;
+    archiveBtn.disabled = true;
+    archiveBtn.textContent = nextArchived ? 'Archiving...' : 'Unarchiving...';
+    try{
+      await adminFetch('/api/admin/projects/archive', {method: 'POST', body: JSON.stringify({id: id, archived: nextArchived})});
+      loadProjectList();
+    }catch(e){
+      alert('Could not update: ' + e.message);
+      archiveBtn.disabled = false;
+      archiveBtn.textContent = currentlyArchived ? 'Unarchive' : 'Archive';
+    }
+    return;
+  }
+
   const delBtn = e.target.closest('[data-delete]');
   if(delBtn){
     const id = delBtn.getAttribute('data-delete');

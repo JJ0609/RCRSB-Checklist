@@ -7,6 +7,7 @@
 let allProjects = [];
 let searchQuery = '';
 let activeRegion = '';   // '' = all regions; resets on every page load
+let statusFilter = 'active';
 const UNSPECIFIED = 'Unspecified';
 
 function syncConfigured(){
@@ -55,6 +56,21 @@ function renderRegionFilter(){
     }).join('');
 }
 
+function renderStatusFilterButtons(){
+  const activeCount = allProjects.filter(function(p){return !p.archived; }).length;
+  const archivedCount = allProjects.filter(function(p){ return p.archived; }).length;
+  const activeBtn = document.querySelector('[data-status-filter="active"]');
+  const archivedBtn = document.querySelector('[data-status-filter="archived"]');
+  if(activeBtn){
+    activeBtn.textContent = 'Active (' + activeCount + ')';
+    activeBtn.classList.toggle('project-filter-button-active', statusFilter === 'active');
+  }
+  if(archivedBtn){
+    archivedBtn.textContent = 'Archived (' + archivedCount + ')';
+    archivedBtn.classList.toggle('project-filter-button-active', statusFilter === 'archived');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function(){
   const select = document.getElementById('regionFilter');
   if(select){
@@ -63,6 +79,13 @@ document.addEventListener('DOMContentLoaded', function(){
       render();
     });
   }
+  document.querySelectorAll('[data-status-filter]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      statusFilter = btn.getAttribute('data-status-filter');
+      renderStatusFilterButtons();
+      render();
+    });
+  });
 });
 
 function render(){
@@ -77,6 +100,7 @@ function render(){
   }
 
   let list = allProjects;
+  list = list.filter(function(p){ return statusFilter === 'archived' ? !!p.archived : !p.archived; });
   if(searchQuery.trim()){
     list = list.filter(function(p){ return matchesSearch(p.name) || matchesSearch(p.shortName); });
   }
@@ -145,6 +169,7 @@ async function loadProjects(){
     const data = await res.json();
     allProjects = data.projects || [];
     renderRegionFilter();
+    renderStatusFilterButtons();
     render();
   }catch(e){
     console.error(e);
