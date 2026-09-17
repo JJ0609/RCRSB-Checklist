@@ -82,7 +82,7 @@
   </div>
 
   <div class="content admin-wrap" id="content">
-    <div id="gate" class="admin-card">
+    <div id="gate" class="admin-card" style="display: flex;">
       <h2>Admin password</h2>
       <div class="field">
         <input type="password" id="pwInput" placeholder="Password">
@@ -92,7 +92,7 @@
     </div>
 
     <div id="panel" hidden>
-      <div class="admin-card">
+      <div class="admin-card" style="display: flex;">
         <h2>Add a project</h2>
         <div class="field">
           <label for="newName">Project name</label>
@@ -126,12 +126,12 @@
         <div id="createMsg"></div>
       </div>
 
-      <div class="admin-card">
+      <div class="admin-card" style="display: flex;">
         <h2>Existing projects</h2>
         <div id="projectList">Loading&hellip;</div>
       </div>
 
-      <div class="admin-card">
+      <div class="admin-card" style="display: flex;">
         <h2>Project Access</h2>
         <p class="field-hint" style="margin-top: -6px; margin-bottom: 12px;">
           Who sees which project in the picker. A project with no grants at all is visible to everyone,
@@ -142,7 +142,7 @@
           <label for="grantEmail">Grant one person access</label>
           <div style="display: flex; gap: 8px;">
             <input type="text" id="grantEmail" placeholder="johndoe@powerdesigninc.us" style="flex: 1;">
-            <select id="grantProject" style="border:1px solid var(--border);flex:1;border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);"></select>
+            <select id="grantProject" style="border:1px solid var(--border);flex: 1;border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);"></select>
             <button class="btn" id="grantBtn">Grant</button>
           </div>
         </div>
