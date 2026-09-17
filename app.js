@@ -282,16 +282,6 @@ function deviceCardHtml(d, showLocation){
     html += '</div>';
   }
 
-  function preventNavigation(e) {
-    e.preventDefault();
-    e.returnValue = "Are you sure you want to leave? Your changes may not be saved.";
-    return e.returnValue;
-}
-
-  function closeForm() {
-    window.removeEventListener("beforeunload", preventNavigation); 
-}
-
   if(openPunchFormFor === d.id){
 
     html += '<div class="punch-form">'
@@ -962,6 +952,14 @@ document.querySelectorAll('.stat.clickable').forEach(function(el){
   el.addEventListener('keydown', function(e){
     if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); el.click(); }
   });
+});
+
+//Warns the user prior to a page unload if the add punch item box is open
+window.addEventListener('beforeunload', function(e){
+  if(openPunchFormFor && (punchDraftText[openPunchFormFor] || '').trim()){
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 // ---------- boot ----------
