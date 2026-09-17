@@ -55,7 +55,7 @@
 }
 .field input[type=file]{font-size:13px;}
 .field-hint{font-size:11.5px;color:var(--ink-soft);margin-top:4px;}
-.admin-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.admin-row{justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
 .admin-row:last-child{border-bottom:none;}
 .admin-row .name{font-weight:700;font-size:14px;}
 .admin-row .meta{font-size:12px;color:var(--ink-soft);}
@@ -140,9 +140,9 @@
 
         <div class="field">
           <label for="grantEmail">Grant one person access</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="grantEmail" placeholder="johndoe@powerdesigninc.us" style="flex: 1;">
-            <select id="grantProject" style="border:1px solid var(--border);flex: 1;border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);"></select>
+          <div style="gap: 8px;">
+            <input type="text" id="grantEmail" placeholder="johndoe@powerdesigninc.us">
+            <select id="grantProject" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);"></select>
             <button class="btn" id="grantBtn">Grant</button>
           </div>
         </div>
