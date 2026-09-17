@@ -136,7 +136,7 @@ document.getElementById('projectList').addEventListener('click', async function(
     archiveBtn.disabled = true;
     archiveBtn.textContent = nextArchived ? 'Archiving...' : 'Unarchiving...';
     try{
-      await adminFetch('/api/admin/projects/archive', {method: 'POST', body: JSON.stringify({id: id, archived: nextArchived})});
+      await adminFetch('/api/admin/projects/archive', {method: 'POST', body: JSON.stringify({id: id, archived: nextArchived, actorName: (sessionStorage.getItem('pd_user_email') || 'Admin')})});
       loadProjectList();
     }catch(e){
       alert('Could not update: ' + e.message);
