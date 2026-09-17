@@ -138,7 +138,7 @@ async function loadProjects(){
   const content = document.getElementById('content');
   content.innerHTML = '<div class="empty" style="padding:60px 20px;">Loading projects&hellip;</div>';
   try{
-    const email = (localStorage.getItem('pd_user_email') || '').trim();
+    const email = (sessionStorage.getItem('pd_user_email') || '').trim();
     const url = SYNC_API_BASE.replace(/\/$/, '') + '/api/projects?email=' + encodeURIComponent(email);
     const res = await fetch(url);
     if(!res.ok) throw new Error('Request failed (' + res.status + ')');

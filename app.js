@@ -24,13 +24,13 @@ let DEVICE_BY_ID = {};
 
 let checklist = {};   // deviceId -> {power,network,function}
 let punches = [];     // {id, deviceId, deviceName, location, description, severity, status, Ownership, reportedBy, createdAt, resolvedBy, resolvedAt}
-let techName = localStorage.getItem('pd_tech_name') || '';
+let techName = sessionStorage.getItem('pd_tech_name') || '';
 if(!techName){
   try{
-    const storedEmail = localStorage.getItem('pd_user_email');
+    const storedEmail = sessionStorage.getItem('pd_user_email');
     if(storedEmail){
       techName = storedEmail;
-      localStorage.setItem('pd_tech_name', techName);
+      sessionStorage.setItem('pd_tech_name', techName);
     } 
   }catch(e){}
 }

@@ -26,7 +26,7 @@
 // identity attached, and the project picker needs to know whos asking.
 (function(){
   try{
-    if(!localStorage.getItem('pd_user_email')){
+    if(!sessionStorage.getItem('pd_user_email')){
       var here = window.location.pathname.split('/').pop() + window.location.search;
       window.location.replace('login.html?redirect=' + encodeURIComponent(here));
     }

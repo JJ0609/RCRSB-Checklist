@@ -27,8 +27,8 @@ function submitLogin(){
         return;
     }
     try{
-        localStorage.setItem('pd_user_email', email);
-        localStorage.setItem('pd_tech_name', email);
+        sessionStorage.setItem('pd_user_email', email);
+        sessionStorage.setItem('pd_tech_name', email);
     }catch(e){}
 
     const params = new URLSearchParams(window.location.search);
@@ -45,7 +45,7 @@ document.getElementById('emailInput').addEventListener('keydown', function(e){
 
 (function(){
     try{
-        if(localStorage.getItem('pd_user_email')){
+        if(sessionStorage.getItem('pd_user_email')){
             const params = new URLSearchParams(window.location.search);
             window.location.replace(safeRedirectTarget(params.get('redirect')));
         }
