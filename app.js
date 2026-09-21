@@ -46,6 +46,7 @@ let punchStatusFilter = 'open';
 let punchLocationFilter = '';
 let openPunchFormFor = null;
 let editingPunchId = null;
+let editingNotesId = null;
 let addingLocation = false;
 let locationDraftText = '';
 let addingDeviceFor = null;
@@ -53,6 +54,7 @@ let deviceDraft = {};
 let addingLocationPunchFor = null;   // location name the location-level punch form is open for, or null
 let locationPunchDraft = '';
 let editDraftText = {};
+let editNoteText = {};
 let pendingSeverity = 'major';
 let pendingOwnership = 'Field Tech/Install';
 let punchDraftText = {};
@@ -263,6 +265,10 @@ function renderLocationDetail(){
     const nameInput = document.getElementById('newDeviceName');
     if(nameInput) nameInput.focus();
   }
+  if(editingNotesId){
+    const ta = document.getElementById('editNoteText');
+    if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
+  }
 }
 
 // A punch item with no device — reported against a specific location,
@@ -339,6 +345,24 @@ function renderFailedChecks(){
   document.getElementById('content').innerHTML = html;
 }
 
+function deviceNoteHtml(d){
+  if(editingNotesId === d.id){
+    return '<div class="punch-forrm" style="margin-top:6px;padding:8px;">' 
+    + '<textarea id="editNoteText" placeholder="Add a note for this device>' + esc(editNoteText[d.id] !== undefined ? editNoteText[d.id] : (d.note || '')) + '</textarea>'
+    + '<div class="form-actions">'
+    + '<button class="btn ghost" id="cancelEditNote" data-device="' + esc(d.id) + '">Cancel</button>'
+    + '<button class="btn primary" id="saveEditNote" data-device="' + esc(d.id) + '">Save note</button>'
+    +'</div></div>'
+  }
+  if(d.note){
+    return '<div class="device-note" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+    + '<span>' + esc(d.note) + '</span>'
+    + '<button class="btn ghost" style="margin-top:6px;padding:3px 9px;font-size:11px;" data-editnote="' + esc(d.id) + '">Edit</button>'
+    + '</div>'
+  }
+  return + '<button class="btn ghost" style="padding:2px 8px;font-size:10.5px;flex:none;" data-editnote="' + esc(d.id) + '">+ Add note</button>';
+}
+
 function deviceCardHtml(d, showLocation){
   const c = getCheck(d.id);
   const ports = portSummary(d);
@@ -356,7 +380,7 @@ function deviceCardHtml(d, showLocation){
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
-  if(d.note) html += '<div class="device-note">' + esc(d.note) + '</div>';
+  html += deviceNoteHtml(d);
   html += '<div class="check-row">';
   CHECKS.forEach(function(chk){
     const v = c[chk.key];
@@ -567,6 +591,13 @@ async function pushAddDevice(fields){
   });
 }
 
+async function pushEditNote(deviceId, note){
+  return apiCall('/api/device/note', {
+    method: 'POST',
+    body: JSON.stringify({project: currentProject, deviceId: deviceId, note: note, actorName: techname || 'Unnamed tech'})
+  });
+}
+
 async function pushToggleResolve(punchId, actorName){
   return apiCall('/api/punch/toggle', {
     method: 'POST',
@@ -591,7 +622,7 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
 function isComposingPunch(){
   const el = document.activeElement;
   if(!el || !el.id) return false;
-  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id === 'locationPunchDesc' || el.id.indexOf('newDevice_') === 0;
+  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id === 'locationPunchDesc' || el.id ==='editNoteText' || el.id.indexOf('newDevice_') === 0;
 }
 
 // Three different punch-entry forms share the same severity/ownership
@@ -674,6 +705,24 @@ async function submitAddDevice(){
     alert('Could not add device: ' + e.message);
     if(btn){ btn.disabled = false; btn.textContent = 'Add device'; }
   }
+}
+
+function submitNoteEdit(deviceId){
+  const dev = DEVICE_BY_ID[deviceId];
+  if(!dev) return;
+  const ta = document.getElementById('editNoteText');
+  const note = (editNoteText[deviceId] !== undefined ? editNoteText[deviceId] : (ta ? ta.value : '')).trim();
+  const btn = document.getElementById('saveEditNote');
+  if(btn){ btn.disabled = true; btn.textContent = 'Saving...'; }
+  pushEditNote(deviceId, note).then(function(){
+    dev.note = note;
+    editingNotesId = null;
+    delete editNoteText[deviceId];
+    renderContent();
+  }).catch(function(e){
+    alert('Could not save note: ' + e.message);
+    if(btn){  btn.disabled = false; btn.textContent = 'Save note'; }
+  });
 }
 
 function persistChecklist(deviceId){
@@ -1089,6 +1138,23 @@ document.getElementById('content').addEventListener('click', function(e){
   const submitLocationPunchBtn = e.target.closest('#submitLocationPunch');
   if(submitLocationPunchBtn){ submitLocationPunch(); return; }
 
+  const editNoteBtn = e.target.closest('[data-editnote]');
+  if(editNoteBtn){
+    const id = editNoteBtn.getAttribute('data-editnote');
+    editingNotesId = id;
+    renderContent();
+    return;
+  }
+  const cancelEditNoteBtn = e.target.closest('#cancelEditNote');
+  if(cancelEditNoteBtn){
+    const id = cancelEditNoteBtn.getAttribute('data-device');
+    delete editNoteText[id];
+    editingNotesId = null;
+    renderContent();
+    return;
+  }
+  const saveEditNoteBtn = e.target.closest('#saveEditNote');
+  if(saveEditNoteBtn){  submitNoteEdit(saveEditNoteBtn.getAttribute('data-device')); return; }
   const backBtn = e.target.closest('#backBtn');
   if(backBtn){ view = 'locations'; renderContent(); return; }
 
@@ -1160,6 +1226,7 @@ document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id === 'editPunchDesc' && editingPunchId){ editDraftText[editingPunchId] = e.target.value; }
   if(e.target.id === 'newLocationName' && addingLocation){ locationDraftText = e.target.value; }
   if(e.target.id === 'locationPunchDesc' && addingLocationPunchFor){ locationPunchDraft = e.target.value; }
+  if(e.target.id === 'editNoteText' && editingNotesId){ editNoteText[editingNotesId] = e.target.value; }
   if(e.target.id && e.target.id.indexOf('newDevice_') === 0 && addingDeviceFor){
     deviceDraft[e.target.id.slice('newDevice_'.length)] = e.target.value;
   }
