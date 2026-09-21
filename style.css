@@ -310,7 +310,7 @@ a{color:inherit; touch-action: manipulation;}
 
 .punch-add-btn{
   margin-top:9px;width:100%;background:none;border:1.5px dashed var(--border-strong);border-radius:9px;
-  padding:7px;font-size:12.5px;font-weight:700;color:var(--ink-soft);cursor:pointer;
+  padding:7px;font-size:12.5px;font-weight:700;color:var(--ink-soft);cursor:pointer;border-top-width: 1em;
 }
 .punch-add-btn:hover{color:var(--accent);border-color:var(--accent);}
 
