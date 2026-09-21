@@ -719,8 +719,10 @@ function submitNoteEdit(deviceId){
   const note = (editNoteText[deviceId] !== undefined ? editNoteText[deviceId] : (ta ? ta.value : '')).trim();
   const btn = document.getElementById('saveEditNote');
   if(btn){ btn.disabled = true; btn.textContent = 'Saving...'; }
-  pushEditNote(deviceId, note).then(function(){
+  pushEditNote(deviceId, note).then(function(result){
     dev.note = note;
+    dev.noteUpdatedBy = result.noteUpdatedBy;
+    dev.noteUpdatedAt = result.noteUpdatedAt;
     editingNotesId = null;
     delete editNoteText[deviceId];
     renderContent();
@@ -938,7 +940,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:P1');
+    ws.mergeCells('A1:R1');
     const title = ws.getCell('A1');
     title.value = projectDisplayName + ' — Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -947,7 +949,7 @@ async function exportDeviceReport(){
     // "Device ID" is the stable join key for re-importing this file later
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
-    const deviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note'];
+    const deviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
@@ -991,10 +993,16 @@ async function exportDeviceReport(){
       const noteCell = row.getCell(16);
       noteCell.value = d.note || '';
       noteCell.fill = xlFill(band);
+      const noteByCell = row.getCell(17);
+      noteByCell.value = d.noteUpdatedBy || '';
+      noteByCell.fill = xlFill(band);
+      const noteAtCell = row.getCell(18);
+      noteAtCell.value = formatEasternTime(d.noteUpdatedAt);
+      noteAtCell.fill = xlFill(band);
       r++;
     });
 
-    ws.columns = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30}];
+    ws.columns = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
     ws.views = [{state:'frozen', ySplit:3}];
 
     // ---- Sheet 2: Punch List ----
