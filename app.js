@@ -345,22 +345,27 @@ function renderFailedChecks(){
   document.getElementById('content').innerHTML = html;
 }
 
+// Notes are the one device field editable in place (see
+// handleEditDeviceNote in the Worker) — a plain block when there's a
+// note and nothing's being edited, an inline edit form when this device
+// is the one currently being edited, or a small "+ Add note" affordance
+// when there's no note yet at all.
 function deviceNoteHtml(d){
   if(editingNotesId === d.id){
-    return '<div class="punch-forrm" style="margin-top:6px;padding:8px;">' 
-    + '<textarea id="editNoteText" placeholder="Add a note for this device>' + esc(editNoteText[d.id] !== undefined ? editNoteText[d.id] : (d.note || '')) + '</textarea>'
-    + '<div class="form-actions">'
-    + '<button class="btn ghost" id="cancelEditNote" data-device="' + esc(d.id) + '">Cancel</button>'
-    + '<button class="btn primary" id="saveEditNote" data-device="' + esc(d.id) + '">Save note</button>'
-    +'</div></div>'
+    return '<div class="punch-form" style="margin-top:6px;padding:8px;">'
+      + '<textarea id="editNoteText" placeholder="Add a note for this device">' + esc(editNoteText[d.id] !== undefined ? editNoteText[d.id] : (d.note || '')) + '</textarea>'
+      + '<div class="form-actions">'
+      + '<button class="btn ghost" id="cancelEditNote" data-device="' + esc(d.id) + '">Cancel</button>'
+      + '<button class="btn primary" id="saveEditNote" data-device="' + esc(d.id) + '">Save note</button>'
+      + '</div></div>';
   }
   if(d.note){
     return '<div class="device-note" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
-    + '<span>' + esc(d.note) + '</span>'
-    + '<button class="btn ghost" style="margin-top:6px;padding:3px 9px;font-size:11px;" data-editnote="' + esc(d.id) + '">Edit</button>'
-    + '</div>'
+      + '<span>' + esc(d.note) + '</span>'
+      + '<button class="btn ghost" style="padding:2px 8px;font-size:10.5px;flex:none;" data-editnote="' + esc(d.id) + '">Edit</button>'
+      + '</div>';
   }
-  return + '<button class="btn ghost" style="padding:2px 8px;font-size:10.5px;flex:none;" data-editnote="' + esc(d.id) + '">+ Add note</button>';
+  return '<button class="btn ghost" style="margin-top:6px;padding:3px 9px;font-size:11px;" data-editnote="' + esc(d.id) + '">+ Add note</button>';
 }
 
 function deviceCardHtml(d, showLocation){
@@ -594,7 +599,7 @@ async function pushAddDevice(fields){
 async function pushEditNote(deviceId, note){
   return apiCall('/api/device/note', {
     method: 'POST',
-    body: JSON.stringify({project: currentProject, deviceId: deviceId, note: note, actorName: techname || 'Unnamed tech'})
+    body: JSON.stringify({project: currentProject, deviceId: deviceId, note: note, actorName: techName || 'Unnamed tech'})
   });
 }
 
@@ -622,7 +627,7 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
 function isComposingPunch(){
   const el = document.activeElement;
   if(!el || !el.id) return false;
-  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id === 'locationPunchDesc' || el.id ==='editNoteText' || el.id.indexOf('newDevice_') === 0;
+  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id === 'locationPunchDesc' || el.id === 'editNoteText' || el.id.indexOf('newDevice_') === 0;
 }
 
 // Three different punch-entry forms share the same severity/ownership
@@ -721,7 +726,7 @@ function submitNoteEdit(deviceId){
     renderContent();
   }).catch(function(e){
     alert('Could not save note: ' + e.message);
-    if(btn){  btn.disabled = false; btn.textContent = 'Save note'; }
+    if(btn){ btn.disabled = false; btn.textContent = 'Save note'; }
   });
 }
 
@@ -1154,7 +1159,8 @@ document.getElementById('content').addEventListener('click', function(e){
     return;
   }
   const saveEditNoteBtn = e.target.closest('#saveEditNote');
-  if(saveEditNoteBtn){  submitNoteEdit(saveEditNoteBtn.getAttribute('data-device')); return; }
+  if(saveEditNoteBtn){ submitNoteEdit(saveEditNoteBtn.getAttribute('data-device')); return; }
+
   const backBtn = e.target.closest('#backBtn');
   if(backBtn){ view = 'locations'; renderContent(); return; }
 
