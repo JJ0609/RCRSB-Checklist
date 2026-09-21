@@ -15,6 +15,10 @@ const CHECKS = [
 ];
 const SEVERITIES = ['minor','major','critical'];
 const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration'];
+// Sentinel for the shared location-punch form/state below, meaning "no
+// location at all — a project-wide item." Never collides with a real
+// location name (those always come from actual devices/locations).
+const PROJECT_WIDE_SCOPE = '__PROJECT_WIDE__';
 
 let currentProject = null;   // set from the ?project= URL param at boot
 let currentProjectMeta = { name: '', shortName: '' };
@@ -46,6 +50,8 @@ let addingLocation = false;
 let locationDraftText = '';
 let addingDeviceFor = null;
 let deviceDraft = {};
+let addingLocationPunchFor = null;   // location name the location-level punch form is open for, or null
+let locationPunchDraft = '';
 let editDraftText = {};
 let pendingSeverity = 'major';
 let pendingOwnership = 'Field Tech/Install';
@@ -237,16 +243,53 @@ function renderLocationDetail(){
   devices.forEach(function(d){ html += deviceCardHtml(d); });
   html += '</div>';
 
+  if(addingLocationPunchFor === loc.name){
+    html += locationPunchFormHtml();
+  } else {
+    html += '<button class="punch-add-btn" id="addLocationPunchBtn" style="margin-top:10px;">+ Add punch item (this location)</button>';
+  }
+
   if(addingDeviceFor === loc.name){
     html += addDeviceFormHtml();
   } else{
     html +='<button class="punch-add-btn" id="addDeviceBtn" style="margin-top:10px;"> + Add Device</button>';
   }
   document.getElementById('content').innerHTML = html;
+  if(addingLocationPunchFor === loc.name){
+    const ta = document.getElementById('locationPunchDesc');
+    if(ta) ta.focus();
+  }
   if(addingDeviceFor === loc.name){
     const nameInput = document.getElementById('newDeviceName');
     if(nameInput) nameInput.focus();
   }
+}
+
+// A punch item with no device — reported against a specific location,
+// or (with PROJECT_WIDE_SCOPE) against the project as a whole, for
+// things that aren't tied to any one place: waiting on client drawings,
+// a contractor scheduling issue, anything that would otherwise become
+// orphaned if the location it was filed under ever got renamed or
+// removed. Shares SEVERITIES/OWNERSHIPS and the same
+// pendingSeverity/pendingOwnership state as every other punch form —
+// only one of these is ever open at a time in practice.
+function locationPunchFormHtml(){
+  const isProjectWide = addingLocationPunchFor === PROJECT_WIDE_SCOPE;
+  const placeholder = isProjectWide
+    ? 'What needs attention on this project overall? e.g. Waiting on client for final AV drawings'
+    : 'What needs attention in this location? e.g. Missing floor box cover';
+  return '<div class="punch-form" style="margin-top:10px;">'
+    + '<textarea id="locationPunchDesc" placeholder="' + esc(placeholder) + '">' + esc(locationPunchDraft) + '</textarea>'
+    + '<div class="sev-row">'
+    + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+    + '</div>'
+    + '<div class="sev-row">'
+    + OWNERSHIPS.map(function(s){ return '<button class="own-btn' + (pendingOwnership===s?' sel':'') + '" data-own="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
+    + '</div>'
+    + '<div class="form-actions">'
+    + '<button class="btn ghost" id="cancelLocationPunch">Cancel</button>'
+    + '<button class="btn primary" id="submitLocationPunch">Log punch item</button>'
+    + '</div></div>';
 }
 
 //All fields are available, but only device name is required
@@ -379,6 +422,12 @@ function renderPunchList(){
   html += '<button class="export-btn" id="exportCsv">Export CSV</button>';
   html += '</div>';
 
+  if(addingLocationPunchFor === PROJECT_WIDE_SCOPE){
+    html += locationPunchFormHtml();
+  } else {
+    html += '<button class="punch-add-btn" id="addProjectPunchBtn" style="margin-bottom:12px;">+ Add punch item (not tied to a location)</button>';
+  }
+
   if(!list.length){
     html += '<div class="empty">No punch items here yet.</div>';
   } else {
@@ -387,7 +436,7 @@ function renderPunchList(){
         html += '<div class="punch-item">'
           + '<div class="sev-stripe ' + pendingSeverity + '"></div>'
           + '<div class="punch-body" style="width:100%;">'
-          + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc">&middot; ' + esc(p.location||'') + '</span></span></div>'
+          + '<div class="top"><span class="loc-dev">' + esc(p.deviceName || 'General') + (p.location ? ' <span class="loc">&middot; ' + esc(p.location) + '</span>' : '') + '</span></div>'
           + '<div class="punch-form" style="margin-top:8px;padding:0;background:none;">'
           + '<textarea id="editPunchDesc">' + esc(editDraftText[p.id] !== undefined ? editDraftText[p.id] : p.description) + '</textarea>'
           + '<div class="sev-row">'
@@ -407,7 +456,7 @@ function renderPunchList(){
       html += '<div class="punch-item">'
         + '<div class="sev-stripe ' + (p.severity||'minor') + '"></div>'
         + '<div class="punch-body">'
-        + '<div class="top"><span class="loc-dev">' + esc(p.deviceName) + ' <span class="loc" data-loc="' + esc(p.location||'') + '" style="cursor:pointer;">&middot; ' + esc(p.location||'') + '</span></span></div>'
+        + '<div class="top"><span class="loc-dev">' + esc(p.deviceName || 'General') + (p.location ? ' <span class="loc" data-loc="' + esc(p.location) + '" style="cursor:pointer;">&middot; ' + esc(p.location) + '</span>' : '') + '</span></div>'
         + '<div class="desc">' + esc(p.description) + '</div>'
         + '<div class="meta"><span>' + (p.severity||'minor').toUpperCase() + '</span>'
         + '<span>' + (p.ownership||'Field Tech/Install').toUpperCase() + '</span>'
@@ -422,6 +471,10 @@ function renderPunchList(){
     });
   }
   document.getElementById('content').innerHTML = html;
+  if(addingLocationPunchFor === PROJECT_WIDE_SCOPE){
+    const ta = document.getElementById('locationPunchDesc');
+    if(ta) ta.focus();
+  }
 }
 
 function renderContent(){
@@ -536,7 +589,17 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
 function isComposingPunch(){
   const el = document.activeElement;
   if(!el || !el.id) return false;
-  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id.indexOf('newDevice_') === 0;
+  return el.id === 'punchDesc' || el.id === 'editPunchDesc' || el.id === 'newLocationName' || el.id === 'locationPunchDesc' || el.id.indexOf('newDevice_') === 0;
+}
+
+// Three different punch-entry forms share the same severity/ownership
+// buttons and pendingSeverity/pendingOwnership state — this picks
+// whichever textarea is actually the open one, so clicking a severity
+// button re-focuses the right field regardless of which form is open.
+function activePunchTextareaId(){
+  if(editingPunchId) return 'editPunchDesc';
+  if(addingLocationPunchFor) return 'locationPunchDesc';
+  return 'punchDesc';
 }
 
 async function syncFromRemote(){
@@ -638,6 +701,28 @@ function submitPunch(deviceId){
   punches.push(item);
   openPunchFormFor = null;
   delete punchDraftText[deviceId];
+  saveCache();
+  renderContent();
+  if(syncConfigured()){
+    pushPunch(item).then(function(res){
+      item.id = res.id;
+      saveCache();
+    }).catch(function(e){ console.error(e); /* stays local-only; flushPendingPunches retries */ });
+  }
+}
+function submitLocationPunch(){
+  const desc = (locationPunchDraft || (document.getElementById('locationPunchDesc') || {}).value || '').trim();
+  if(!desc) return;
+  const tempId = 'local-' + Date.now();
+  const isProjectWide = addingLocationPunchFor === PROJECT_WIDE_SCOPE;
+  const item = {
+    id: tempId, deviceId: null, deviceName: '', location: isProjectWide ? '' : addingLocationPunchFor,
+    description: desc, severity: pendingSeverity, ownership: pendingOwnership, status: 'open',
+    reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
+  };
+  punches.push(item);
+  addingLocationPunchFor = null;
+  locationPunchDraft = '';
   saveCache();
   renderContent();
   if(syncConfigured()){
@@ -868,6 +953,8 @@ async function exportDeviceReport(){
     // Import Results in admin.html). Leave "Punch ID" blank on a new row
     // you type by hand to log a new issue offline — it'll be created as
     // new on import. Leave it filled in on an existing row to update it.
+    // "Level" isn't stored on a punch item directly (only devices have
+    // one) — looked up from the device this punch is against instead.
     const punchHeaders = ['Punch ID','Device ID','Location','Level','Device Name','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At'];
     const punchHeaderRow = pl.getRow(3);
     punchHeaders.forEach(function(h, i){ punchHeaderRow.getCell(i+1).value = h; });
@@ -917,7 +1004,7 @@ async function exportDeviceReport(){
       // reportedBy: the tech who submitted this punch item
       const tailVals = [p.reportedBy || '', formatEasternTime(p.createdAt), p.resolvedBy || '', formatEasternTime(p.resolvedAt)];
       tailVals.forEach(function(v, i){
-        const cell = row.getCell(9+i);
+        const cell = row.getCell(10+i);
         cell.value = v;
         cell.fill = xlFill(band);
       });
@@ -979,6 +1066,27 @@ document.getElementById('content').addEventListener('click', function(e){
   const submitAddDeviceBtn = e.target.closest('#submitAddDevice');
   if(submitAddDeviceBtn){ submitAddDevice(); return; }
 
+  const addLocationPunchBtn = e.target.closest('#addLocationPunchBtn');
+  if(addLocationPunchBtn){
+    addingLocationPunchFor = currentLocation; locationPunchDraft = '';
+    pendingSeverity = 'major'; pendingOwnership = 'Field Tech/Install';
+    renderContent();
+    setTimeout(function(){ const ta = document.getElementById('locationPunchDesc'); if(ta) ta.focus(); }, 0);
+    return;
+  }
+  const addProjectPunchBtn = e.target.closest('#addProjectPunchBtn');
+  if(addProjectPunchBtn){
+    addingLocationPunchFor = PROJECT_WIDE_SCOPE; locationPunchDraft = '';
+    pendingSeverity = 'major'; pendingOwnership = 'Field Tech/Install';
+    renderContent();
+    setTimeout(function(){ const ta = document.getElementById('locationPunchDesc'); if(ta) ta.focus(); }, 0);
+    return;
+  }
+  const cancelLocationPunchBtn = e.target.closest('#cancelLocationPunch');
+  if(cancelLocationPunchBtn){ addingLocationPunchFor = null; locationPunchDraft = ''; renderContent(); return; }
+  const submitLocationPunchBtn = e.target.closest('#submitLocationPunch');
+  if(submitLocationPunchBtn){ submitLocationPunch(); return; }
+
   const backBtn = e.target.closest('#backBtn');
   if(backBtn){ view = 'locations'; renderContent(); return; }
 
@@ -999,7 +1107,7 @@ document.getElementById('content').addEventListener('click', function(e){
   if(sevBtn){
     pendingSeverity = sevBtn.getAttribute('data-sev');
     renderContent();
-    const ta = document.getElementById(editingPunchId ? 'editPunchDesc' : 'punchDesc');
+    const ta = document.getElementById(activePunchTextareaId());
     if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
     return;
   }
@@ -1008,7 +1116,7 @@ document.getElementById('content').addEventListener('click', function(e){
   if(ownBtn){
     pendingOwnership = ownBtn.getAttribute('data-own');
     renderContent();
-    const ta = document.getElementById(editingPunchId ? 'editPunchDesc' : 'punchDesc');
+    const ta = document.getElementById(activePunchTextareaId());
     if(ta){ ta.focus(); const v = ta.value; ta.setSelectionRange(v.length, v.length); }
     return;
   }
@@ -1049,6 +1157,7 @@ document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id === 'punchDesc' && openPunchFormFor){ punchDraftText[openPunchFormFor] = e.target.value; }
   if(e.target.id === 'editPunchDesc' && editingPunchId){ editDraftText[editingPunchId] = e.target.value; }
   if(e.target.id === 'newLocationName' && addingLocation){ locationDraftText = e.target.value; }
+  if(e.target.id === 'locationPunchDesc' && addingLocationPunchFor){ locationPunchDraft = e.target.value; }
   if(e.target.id && e.target.id.indexOf('newDevice_') === 0 && addingDeviceFor){
     deviceDraft[e.target.id.slice('newDevice_'.length)] = e.target.value;
   }
@@ -1100,7 +1209,9 @@ document.querySelectorAll('.stat.clickable').forEach(function(el){
 
 //Warns the user prior to a page unload if the add punch item box is open
 window.addEventListener('beforeunload', function(e){
-  if(openPunchFormFor && (punchDraftText[openPunchFormFor] || '').trim()){
+  const hasDeviceDraft = openPunchFormFor && (punchDraftText[openPunchFormFor] || '').trim();
+  const hasLocationDraft = addingLocationPunchFor && (locationPunchDraft || '').trim();
+  if(hasDeviceDraft || hasLocationDraft){
     e.preventDefault();
     e.returnValue = '';
   }
