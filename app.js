@@ -797,7 +797,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:O1');
+    ws.mergeCells('A1:P1');
     const title = ws.getCell('A1');
     title.value = projectDisplayName + ' — Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -806,7 +806,7 @@ async function exportDeviceReport(){
     // "Device ID" is the stable join key for re-importing this file later
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
-    const deviceHeaders = ['Device ID','Location','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note'];
+    const deviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note'];
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
@@ -853,12 +853,12 @@ async function exportDeviceReport(){
       r++;
     });
 
-    ws.columns = [{width:20},{width:26},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30}];
+    ws.columns = [{width:20},{width:26},{widthL12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30}];
     ws.views = [{state:'frozen', ySplit:3}];
 
     // ---- Sheet 2: Punch List ----
     const pl = wb.addWorksheet('Punch List');
-    pl.mergeCells('A1:L1');
+    pl.mergeCells('A1:M1');
     const plTitle = pl.getCell('A1');
     plTitle.value = projectDisplayName + ' — Punch List';
     plTitle.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -868,7 +868,7 @@ async function exportDeviceReport(){
     // Import Results in admin.html). Leave "Punch ID" blank on a new row
     // you type by hand to log a new issue offline — it'll be created as
     // new on import. Leave it filled in on an existing row to update it.
-    const punchHeaders = ['Punch ID','Device ID','Location','Device Name','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At'];
+    const punchHeaders = ['Punch ID','Device ID','Location','Level','Device Name','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At'];
     const punchHeaderRow = pl.getRow(3);
     punchHeaders.forEach(function(h, i){ punchHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(punchHeaderRow, punchHeaders.length);
@@ -923,7 +923,7 @@ async function exportDeviceReport(){
       pr++;
     });
 
-    pl.columns = [{width:20},{width:20},{width:22},{width:18},{width:38},{width:11},{width:16},{width:11},{width:16},{width:19},{width:16},{width:19}];
+    pl.columns = [{width:20},{width:20},{width:22},{width:12},{width:18},{width:38},{width:11},{width:16},{width:11},{width:16},{width:19},{width:16},{width:19}];
     pl.views = [{state:'frozen', ySplit:3}];
 
     const buf = await wb.xlsx.writeBuffer();
