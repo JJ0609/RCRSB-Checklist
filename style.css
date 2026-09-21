@@ -222,6 +222,7 @@ a{color:inherit; touch-action: manipulation;}
 }
 .stat .num{font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:22px;line-height:1;}
 .stat .lbl{font-size:11px;color:var(--topbar-text-soft);margin-top:3px;letter-spacing:.02em;}
+.stat.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 .stat.accent .num{color:var(--topbar-fail);}
 .stat.clickable{cursor:pointer;transition:background 0.12s ease,border-color 0.12s ease;}
 .stat.clickable:hover{background:var(--topbar-overlay-2);border-color:var(--topbar-border-2);}
