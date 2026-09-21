@@ -246,7 +246,7 @@ function renderLocationDetail(){
   if(addingLocationPunchFor === loc.name){
     html += locationPunchFormHtml();
   } else {
-    html += '<button class="punch-add-btn" id="addLocationPunchBtn" style="margin-top:10px;">+ Add punch item (this location)</button>';
+    html += '<button class="punch-add-btn" id="addLocationPunchBtn" style="margin-top:10px;">+ Add punch item</button>';
   }
 
   if(addingDeviceFor === loc.name){
@@ -407,7 +407,8 @@ function deviceCardHtml(d, showLocation){
 function renderPunchList(){
   let list = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
   if(punchStatusFilter !== 'all') list = list.filter(function(p){ return p.status === punchStatusFilter; });
-  if(punchLocationFilter) list = list.filter(function(p){ return p.location === punchLocationFilter; });
+  if(punchLocationFilter === PROJECT_WIDE_SCOPE) list= list.filter(function(p){ return !p.location; });
+  else if(punchLocationFilter) list = list.filter(function(p){ return p.location === punchLocationFilter; });
   if(searchQuery.trim()) list = list.filter(function(p){ return matchesSearch(p.description) || matchesSearch(p.deviceName) || matchesSearch(p.location); });
 
   let html = '<div class="punch-toolbar">';
@@ -415,6 +416,7 @@ function renderPunchList(){
     html += '<button class="chip' + (punchStatusFilter===f?' active':'') + '" data-pfilter="' + f + '">' + f.charAt(0).toUpperCase()+f.slice(1) + '</button>';
   });
   html += '<select id="punchLocFilter"><option value="">All locations</option>';
+  html += '<option value="' + PROJECT_WIDE_SCOPE + '"' + (punchLocationFilter===PROJECT_WIDE_SCOPE?' selected': '') + '>General</option>';
   LOCATIONS.forEach(function(l){
     html += '<option value="' + esc(l.name) + '"' + (punchLocationFilter===l.name?' selected':'') + '>' + esc(l.name) + '</option>';
   });
@@ -425,7 +427,7 @@ function renderPunchList(){
   if(addingLocationPunchFor === PROJECT_WIDE_SCOPE){
     html += locationPunchFormHtml();
   } else {
-    html += '<button class="punch-add-btn" id="addProjectPunchBtn" style="margin-bottom:12px;">+ Add punch item (not tied to a location)</button>';
+    html += '<button class="punch-add-btn" id="addProjectPunchBtn" style="margin-bottom:12px;">+ Add punch item</button>';
   }
 
   if(!list.length){
