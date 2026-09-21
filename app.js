@@ -825,7 +825,7 @@ async function exportDeviceReport(){
       idCell.value = d.id;
       idCell.fill = xlFill(band);
       idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
-      const plainVals = [d.location, d.name, d.zone, d.channel, d.model, d.ip, d.ipid, d.avio];
+      const plainVals = [d.location, d.level, d.name, d.zone, d.channel, d.model, d.ip, d.ipid, d.avio];
       plainVals.forEach(function(v, i){
         const cell = row.getCell(i+2);
         cell.value = v || '';
@@ -833,7 +833,7 @@ async function exportDeviceReport(){
       });
       [c.power, c.network, c.function].forEach(function(v, i){
         const st = checkCellStyle(v);
-        const cell = row.getCell(10+i);
+        const cell = row.getCell(11+i);
         cell.value = st.label;
         cell.fill = xlFill(st.bg);
         cell.font = {bold:true, color:{argb: st.txt}};
@@ -841,19 +841,19 @@ async function exportDeviceReport(){
       // Audit trail: who last touched a Power/Network/Function check on
       // this device, and when, this is the accountability record for
       // the exported sheet, not just a snapshot of the current status.
-      const updByCell = row.getCell(13);
+      const updByCell = row.getCell(14);
       updByCell.value = c.updatedBy || '';
       updByCell.fill = xlFill(band);
-      const updAtCell = row.getCell(14);
+      const updAtCell = row.getCell(15);
       updAtCell.value = formatEasternTime(c.updatedAt);
       updAtCell.fill = xlFill(band);
-      const noteCell = row.getCell(15);
+      const noteCell = row.getCell(16);
       noteCell.value = d.note || '';
       noteCell.fill = xlFill(band);
       r++;
     });
 
-    ws.columns = [{width:20},{width:26},{widthL12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30}];
+    ws.columns = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30}];
     ws.views = [{state:'frozen', ySplit:3}];
 
     // ---- Sheet 2: Punch List ----
@@ -889,26 +889,27 @@ async function exportDeviceReport(){
       devIdCell.fill = xlFill(band);
       devIdCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
 
-      const plainVals = [p.location || '', p.deviceName || '', p.description || ''];
+      const dev = DEVICE_BY_ID[p.deviceId];
+      const plainVals = [p.location || '', (dev && dev.level) || '', p.deviceName || '', p.description || ''];
       plainVals.forEach(function(v, i){
         const cell = row.getCell(i+3);
         cell.value = v;
         cell.fill = xlFill(band);
       });
       const sevStyle = severityCellStyle(p.severity);
-      const sevCell = row.getCell(6);
+      const sevCell = row.getCell(7);
       sevCell.value = (p.severity || '').charAt(0).toUpperCase() + (p.severity || '').slice(1);
       sevCell.fill = xlFill(sevStyle.bg);
       sevCell.font = {bold:true, color:{argb: sevStyle.txt}};
 
       const ownStyle = ownershipCellStyle(p.ownership);
-      const ownCell = row.getCell(7);
+      const ownCell = row.getCell(8);
       ownCell.value = p.ownership || '';
       ownCell.fill = xlFill(ownStyle.bg);
       ownCell.font = {bold:true, color:{argb: ownStyle.txt}};
 
       const statStyle = statusCellStyle(p.status);
-      const statCell = row.getCell(8);
+      const statCell = row.getCell(9);
       statCell.value = p.status === 'resolved' ? 'Resolved' : 'Open';
       statCell.fill = xlFill(statStyle.bg);
       statCell.font = {bold:true, color:{argb: statStyle.txt}};
