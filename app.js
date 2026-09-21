@@ -1063,8 +1063,10 @@ document.getElementById('searchInput').addEventListener('input', function(e){
 function activateTab(name){
   const locBtn = document.getElementById('tabLocations');
   const punchBtn = document.getElementById('tabPunch');
-  if(name === 'punch'){ punchBtn.classList.add('active'); locBtn.classList.remove('active'); }
-  else { locBtn.classList.add('active'); punchBtn.classList.remove('active'); }
+  const failBtn = document.getElementById("statFailCard");
+  if(name === 'punch'){ punchBtn.classList.add('active'); locBtn.classList.remove('active'); failBtn.classList.remove('active'); }
+  else if(name === 'failed-checks'){ failBtn.classList.add('active'); locBtn.classList.remove('active'); punchBtn.classList.remove('active'); }
+  else { locBtn.classList.add('active'); punchBtn.classList.remove('active'); failBtn.classList.remove('active'); }
 }
 document.getElementById('tabLocations').addEventListener('click', function(){
   view='locations'; currentLocation=null;
@@ -1085,6 +1087,7 @@ document.getElementById('statOpenCard').addEventListener('click', function(){
 document.getElementById('statFailCard').addEventListener('click', function(){
   view = 'failed-checks';
   searchQuery = '';
+  activateTab('failed-checks')
   document.getElementById('searchInput').value = '';
   renderContent();
 });
