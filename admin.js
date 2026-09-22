@@ -16,6 +16,8 @@
 // here to match — this is the one place that assumption lives.
 // ─────────────────────────────────────────────────────────────
 
+const { act } = require("react");
+
 function syncConfigured(){
   return typeof SYNC_API_BASE !== 'undefined' && SYNC_API_BASE && SYNC_API_BASE.indexOf('REPLACE-WITH') === -1;
 }
@@ -122,7 +124,7 @@ async function loadProjectList(){
 function populateGrantProjectDropdown(projects){
   const sel = document.getElementById('grantProject');
   if(!sel) return;
-  sel.innerHTML = projects.map(function(p){
+  sel.innerHTML = '<option value="__ALL_PROJECTS__">- All Projects -</option>' + projects.map(function(p){
     return '<option value="' + esc(p.id) + '">' + esc(p.name) + ' (' + esc(p.id) + ')</option>';
   }).join('');
 }
@@ -303,15 +305,24 @@ document.getElementById('grantBtn').addEventListener('click', async function(){
   const email = emailInput.value.trim().toLowerCase();
   const projectId = projectSel.value;
   const msgEl = document.getElementById('accessMsg');
+  const actorName = sessionStorage.getItem('pd_user_email') || 'Admin';
   if(!email){ showMsg(msgEl, 'Enter an email or *@domain.com wildcard.', 'err'); return; }
   if(!projectId){ showMsg(msgEl, 'No project selected.', 'err'); return; }
   this.disabled = true;
   try{
+    if(projectId === '__ALL_PROJECTS__'){
+      const result = await adminFetch('/api/admin/access/grant-all', {
+        method: 'POST',
+        body: JSON.stringify({email: email, actorName: actorName})
+      });
+      showMsg(msgEl, 'Granted access to all ' + result.granted + ' project' + (result.granted===1?'':'s') + '.', 'ok');
+    }else{
     await adminFetch('/api/admin/access/grant', {
       method: 'POST',
-      body: JSON.stringify({projectId: projectId, email: email, actorName: 'Admin'})
+      body: JSON.stringify({projectId: projectId, email: email, actorName: actorName})
     });
     showMsg(msgEl, 'Granted.', 'ok');
+  }
     emailInput.value = '';
     loadAccessList();
     loadProjectList();
