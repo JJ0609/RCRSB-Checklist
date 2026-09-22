@@ -16,8 +16,6 @@
 // here to match — this is the one place that assumption lives.
 // ─────────────────────────────────────────────────────────────
 
-const { act } = require("react");
-
 function syncConfigured(){
   return typeof SYNC_API_BASE !== 'undefined' && SYNC_API_BASE && SYNC_API_BASE.indexOf('REPLACE-WITH') === -1;
 }
