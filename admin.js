@@ -122,7 +122,7 @@ async function loadProjectList(){
 function populateGrantProjectDropdown(projects){
   const sel = document.getElementById('grantProject');
   if(!sel) return;
-  sel.innerHTML = '<option value="__ALL_PROJECTS__">- All Projects -</option>' + projects.map(function(p){
+  sel.innerHTML = '<option value="__ALL_PROJECTS__">All Projects</option>' + projects.map(function(p){
     return '<option value="' + esc(p.id) + '">' + esc(p.name) + ' (' + esc(p.id) + ')</option>';
   }).join('');
 }
@@ -314,13 +314,13 @@ document.getElementById('grantBtn').addEventListener('click', async function(){
         body: JSON.stringify({email: email, actorName: actorName})
       });
       showMsg(msgEl, 'Granted access to all ' + result.granted + ' project' + (result.granted===1?'':'s') + '.', 'ok');
-    }else{
-    await adminFetch('/api/admin/access/grant', {
-      method: 'POST',
-      body: JSON.stringify({projectId: projectId, email: email, actorName: actorName})
-    });
-    showMsg(msgEl, 'Granted.', 'ok');
-  }
+    } else {
+      await adminFetch('/api/admin/access/grant', {
+        method: 'POST',
+        body: JSON.stringify({projectId: projectId, email: email, actorName: actorName})
+      });
+      showMsg(msgEl, 'Granted.', 'ok');
+    }
     emailInput.value = '';
     loadAccessList();
     loadProjectList();
@@ -606,35 +606,6 @@ function parseWorkbook(workbook){
   // for MAC/VLAN yet, and credentials shouldn't go into a login-free app.
   const normHeader = function(h){ return String(h || '').replace(/[\s#+|/]+/g, '').toLowerCase(); };
 
-  let headerRow = null, cols = {}, zoneChannelCombined = false;
-  const MAX_HEADER_SCAN = 10;
-  for(let r = 1; r <= MAX_HEADER_SCAN; r++){
-    const found = {};
-    let combined = false;
-    for(let c = 1; c <= 40; c++){
-      const h = normHeader(cellVal(di, r, c));
-      if(!h) continue;
-      if(h === 'componentname' || h === 'devicename') found.name = c;
-      else if(h === 'status') found.status = c;
-      else if(h === 'level') found.level = c;
-      else if(h === 'location') found.location = c;
-      else if(h.indexOf('zone') !== -1 && h.indexOf('channel') !== -1){ found.zone = c; combined = true; }
-      else if(h === 'zone') found.zone = c;
-      else if(h === 'ampchannel' || h === 'channel') found.channel = c;
-      else if(h.indexOf('model') !== -1) found.model = c;
-      else if(h === 'ipaddress') found.ip = c;
-      else if(h === 'id') found.ipid = c;
-      else if(h === 'avio' || h === 'av') found.avio = c;
-      else if(h === 'note') found.note = c;
-    }
-    if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
-  }
-  if(headerRow === null){
-    throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "Device Info" — check the header row is present and spelled recognizably.');
-  }
-
-  const devices = [];
-
   // Splits a combined "Zone # + Amp Channel" cell like "Zone 7 Channel 3"
   // into separate zone/channel values ("7" and "3" — the display already
   // adds its own "Zone"/"Ch" labels). Falls back to keeping the whole raw
@@ -648,35 +619,83 @@ function parseWorkbook(workbook){
     return {zone: s, channel: ''};
   }
 
-  const MAX_ROW = 3200;
-  for(let r = headerRow + 1; r <= MAX_ROW; r++){
-    const name = cleanStr(cellVal(di, r, cols.name));
-    if(!name) continue;
-    let zone = '', channel = '';
-    if(zoneChannelCombined){
-      const zc = splitZoneChannel(cellVal(di, r, cols.zone));
-      zone = zc.zone; channel = zc.channel;
-    } else {
-      zone = cleanStr(cellVal(di, r, cols.zone));
-      channel = cleanStr(cellVal(di, r, cols.channel));
+  // Parses ONE Device Info-like sheet into an array of device objects.
+  // Multiple sheets matching "Device Info" are treated as intentional —
+  // e.g. one per building on a multi-building project — and every
+  // matching sheet gets merged into a single device list below, rather
+  // than only reading the first one and silently ignoring the rest.
+  // Header detection runs independently per sheet, so sheets with
+  // slightly different column layouts still work correctly.
+  function parseOneDeviceInfoSheet(diName){
+    const di = workbook.Sheets[diName];
+    let headerRow = null, cols = {}, zoneChannelCombined = false;
+    const MAX_HEADER_SCAN = 10;
+    for(let r = 1; r <= MAX_HEADER_SCAN; r++){
+      const found = {};
+      let combined = false;
+      for(let c = 1; c <= 40; c++){
+        const h = normHeader(cellVal(di, r, c));
+        if(!h) continue;
+        if(h === 'componentname' || h === 'devicename') found.name = c;
+        else if(h === 'status') found.status = c;
+        else if(h === 'level') found.level = c;
+        else if(h === 'location') found.location = c;
+        else if(h.indexOf('zone') !== -1 && h.indexOf('channel') !== -1){ found.zone = c; combined = true; }
+        else if(h === 'zone') found.zone = c;
+        else if(h === 'ampchannel' || h === 'channel') found.channel = c;
+        else if(h.indexOf('model') !== -1) found.model = c;
+        else if(h === 'ipaddress') found.ip = c;
+        else if(h === 'id') found.ipid = c;
+        else if(h === 'avio' || h === 'av') found.avio = c;
+        else if(h === 'note') found.note = c;
+      }
+      if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
     }
-    devices.push({
-      name: name,
-      status: cleanStr(cellVal(di, r, cols.status)),
-      level: cleanStr(cellVal(di, r, cols.level)),
-      location: cleanStr(cellVal(di, r, cols.location)),
-      zone: zone,
-      channel: channel,
-      model: cleanStr(cellVal(di, r, cols.model)),
-      ip: cleanStr(cellVal(di, r, cols.ip)),
-      ipid: cleanStr(cellVal(di, r, cols.ipid)),
-      avio: cleanStr(cellVal(di, r, cols.avio)),
-      note: cleanStr(cellVal(di, r, cols.note)),
-      ports: []
-    });
+    if(headerRow === null){
+      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" — check the header row is present and spelled recognizably.');
+    }
+
+    const sheetDevices = [];
+    const MAX_ROW = 3200;
+    for(let r = headerRow + 1; r <= MAX_ROW; r++){
+      const name = cleanStr(cellVal(di, r, cols.name));
+      if(!name) continue;
+      let zone = '', channel = '';
+      if(zoneChannelCombined){
+        const zc = splitZoneChannel(cellVal(di, r, cols.zone));
+        zone = zc.zone; channel = zc.channel;
+      } else {
+        zone = cleanStr(cellVal(di, r, cols.zone));
+        channel = cleanStr(cellVal(di, r, cols.channel));
+      }
+      sheetDevices.push({
+        name: name,
+        status: cleanStr(cellVal(di, r, cols.status)),
+        level: cleanStr(cellVal(di, r, cols.level)),
+        location: cleanStr(cellVal(di, r, cols.location)),
+        zone: zone,
+        channel: channel,
+        model: cleanStr(cellVal(di, r, cols.model)),
+        ip: cleanStr(cellVal(di, r, cols.ip)),
+        ipid: cleanStr(cellVal(di, r, cols.ipid)),
+        avio: cleanStr(cellVal(di, r, cols.avio)),
+        note: cleanStr(cellVal(di, r, cols.note)),
+        ports: []
+      });
+    }
+    return sheetDevices;
   }
+
+  let devices = [];
+  diNames.forEach(function(diName){
+    devices = devices.concat(parseOneDeviceInfoSheet(diName));
+  });
+
   if(!devices.length){
-    throw new Error('No devices found in "Device Info" below the header row (row ' + headerRow + ').');
+    throw new Error(
+      'No devices found across ' + diNames.length + ' "Device Info" sheet' + (diNames.length===1?'':'s') +
+      ' (' + diNames.join(', ') + ').'
+    );
   }
 
   const byName = {};
