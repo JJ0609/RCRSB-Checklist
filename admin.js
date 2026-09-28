@@ -370,6 +370,7 @@ document.getElementById('projectList').addEventListener('change', async function
 // ---------- project access (who sees what) ----------
 let accessRows = [];             // raw grants from the server, cached client-side
 let accessGroupBy = 'project';   // 'project' | 'email' — resets to project on page load
+let expandedAccessGroup = null;  // key of the one open accordion card, or null
 
 async function loadAccessList(){
   const el = document.getElementById('accessList');
@@ -383,10 +384,11 @@ async function loadAccessList(){
   }
 }
 
-// Grouped by project or by person — never a flat time-ordered list, so
-// this stays scannable as grants accumulate. Both the grouping and the
-// order within each group are alphabetical, not chronological; addedAt
-// still shows per-row but no longer drives the structure.
+// Grouped by project or by person, shown as a one-open-at-a-time
+// accordion rather than everything expanded flat — stays scannable
+// even with many grants. Both the grouping and the order within each
+// group are alphabetical, not chronological; addedAt still shows per
+// row but no longer drives the structure.
 function renderAccessList(){
   const el = document.getElementById('accessList');
   let html = '<div style="display:flex;gap:8px;margin-bottom:14px;">'
@@ -400,11 +402,22 @@ function renderAccessList(){
     return;
   }
 
-  function groupHeader(title, sub, count, singular, plural){
-    return '<div style="display:flex;align-items:baseline;gap:8px;margin:0 0 6px;padding-top:12px;border-top:1px solid var(--border);">'
-      + '<div style="font-weight:800;font-size:13.5px;">' + esc(title) + '</div>'
-      + (sub ? '<div style="font-size:11px;color:var(--ink-soft);">' + esc(sub) + '</div>' : '')
-      + '<div style="font-size:11px;color:var(--ink-soft);margin-left:auto;">' + count + ' ' + (count===1?singular:plural) + '</div>'
+  // Each group is its own card: a clickable header row plus, only for
+  // whichever one key currently matches expandedAccessGroup, the list
+  // of rows underneath. Clicking a header toggles it — opening one
+  // closes whatever else was open, since expandedAccessGroup can only
+  // ever hold a single key at a time. Clicking the already-open header
+  // again collapses it (handled in the click listener, not here).
+  function groupCard(key, title, sub, count, singular, plural, rowsHtml){
+    const isOpen = expandedAccessGroup === key;
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;">'
+      + '<button data-group-key="' + esc(key) + '" style="width:100%;display:flex;align-items:baseline;gap:8px;padding:11px 14px;background:' + (isOpen ? 'var(--surface-2)' : 'var(--surface)') + ';border:none;cursor:pointer;text-align:left;font:inherit;color:inherit;">'
+      + '<span style="font-size:10px;color:var(--ink-soft);display:inline-block;transition:transform .15s ease;transform:rotate(' + (isOpen ? '90deg' : '0deg') + ');">&#9656;</span>'
+      + '<span style="font-weight:800;font-size:13.5px;">' + esc(title) + '</span>'
+      + (sub ? '<span style="font-size:11px;color:var(--ink-soft);">' + esc(sub) + '</span>' : '')
+      + '<span style="font-size:11px;color:var(--ink-soft);margin-left:auto;">' + count + ' ' + (count===1?singular:plural) + '</span>'
+      + '</button>'
+      + (isOpen ? '<div style="padding:2px 14px 8px;border-top:1px solid var(--border);">' + rowsHtml + '</div>' : '')
       + '</div>';
   }
   function grantRow(primaryText, secondaryText, projectId, email){
@@ -424,10 +437,8 @@ function renderAccessList(){
     Object.keys(groups).sort(function(a,b){ return groups[a].name.localeCompare(groups[b].name); }).forEach(function(pid){
       const g = groups[pid];
       const rows = g.rows.slice().sort(function(a,b){ return a.email.localeCompare(b.email); });
-      html += groupHeader(g.name, pid, rows.length, 'person', 'people');
-      rows.forEach(function(r){
-        html += grantRow(r.email, 'added by ' + (r.addedBy || ''), r.projectId, r.email);
-      });
+      const rowsHtml = rows.map(function(r){ return grantRow(r.email, 'added by ' + (r.addedBy || ''), r.projectId, r.email); }).join('');
+      html += groupCard(pid, g.name, pid, rows.length, 'person', 'people', rowsHtml);
     });
   } else {
     const groups = {};
@@ -437,10 +448,8 @@ function renderAccessList(){
     });
     Object.keys(groups).sort().forEach(function(email){
       const rows = groups[email].slice().sort(function(a,b){ return a.projectName.localeCompare(b.projectName); });
-      html += groupHeader(email, '', rows.length, 'project', 'projects');
-      rows.forEach(function(r){
-        html += grantRow(r.projectName, r.projectId + ' &middot; added by ' + (r.addedBy || ''), r.projectId, r.email);
-      });
+      const rowsHtml = rows.map(function(r){ return grantRow(r.projectName, r.projectId + ' &middot; added by ' + (r.addedBy || ''), r.projectId, r.email); }).join('');
+      html += groupCard(email, email, '', rows.length, 'project', 'projects', rowsHtml);
     });
   }
 
@@ -483,6 +492,15 @@ document.getElementById('accessList').addEventListener('click', async function(e
   const groupBtn = e.target.closest('[data-access-group]');
   if(groupBtn){
     accessGroupBy = groupBtn.getAttribute('data-access-group');
+    expandedAccessGroup = null; // project ids and emails aren't the same key space
+    renderAccessList();
+    return;
+  }
+
+  const cardToggle = e.target.closest('[data-group-key]');
+  if(cardToggle){
+    const key = cardToggle.getAttribute('data-group-key');
+    expandedAccessGroup = (expandedAccessGroup === key) ? null : key;
     renderAccessList();
     return;
   }
