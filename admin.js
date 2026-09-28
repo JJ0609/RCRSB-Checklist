@@ -124,7 +124,7 @@ async function loadProjectList(){
 function populateGrantProjectDropdown(projects){
   const sel = document.getElementById('grantProject');
   if(!sel) return;
-  sel.innerHTML = '<option value="__ALL_PROJECTS__">— All Projects —</option>' + projects.map(function(p){
+  sel.innerHTML = '<option value="__ALL_PROJECTS__">All Projects</option>' + projects.map(function(p){
     return '<option value="' + esc(p.id) + '">' + esc(p.name) + ' (' + esc(p.id) + ')</option>';
   }).join('');
 }
