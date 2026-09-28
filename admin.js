@@ -107,8 +107,10 @@ async function loadProjectList(){
         + '<div style="display:flex;gap:8px;flex:none;">'
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
+        + '<input type="file" accept=".xlsx" data-sync-file="' + esc(p.id) + '" style="display:none;">'
         + '<button class="btn" data-update="' + esc(p.id) + '">Update Devices</button>'
         + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
+        + '<button class="btn" data-sync="' + esc(p.id) + '" style="border-color:var(--open);color:var(--open);" title="Adds/updates devices AND removes any device or location missing from the file">Sync Devices (removes missing)</button>'
         + '<button class="btn" data-archive="' + esc(p.id) + '" data-currently-archived="' + (p.archived ? '1' : '0') + '">' + (p.archived ? 'Unarchive' : 'Archive') + '</button>'
         + '<button class="btn" data-delete="' + esc(p.id) + '" style="border-color:var(--fail);color:var(--fail);">Delete</button>'
         + '</div>'
@@ -122,7 +124,7 @@ async function loadProjectList(){
 function populateGrantProjectDropdown(projects){
   const sel = document.getElementById('grantProject');
   if(!sel) return;
-  sel.innerHTML = '<option value="__ALL_PROJECTS__">All Projects</option>' + projects.map(function(p){
+  sel.innerHTML = '<option value="__ALL_PROJECTS__">— All Projects —</option>' + projects.map(function(p){
     return '<option value="' + esc(p.id) + '">' + esc(p.name) + ' (' + esc(p.id) + ')</option>';
   }).join('');
 }
@@ -167,6 +169,14 @@ document.getElementById('projectList').addEventListener('click', async function(
   if(updateBtn){
     const id = updateBtn.getAttribute('data-update');
     const fileInput = document.querySelector('[data-update-file="' + CSS.escape(id) + '"]');
+    if(fileInput) fileInput.click();
+    return;
+  }
+
+  const syncBtn = e.target.closest('[data-sync]');
+  if(syncBtn){
+    const id = syncBtn.getAttribute('data-sync');
+    const fileInput = document.querySelector('[data-sync-file="' + CSS.escape(id) + '"]');
     if(fileInput) fileInput.click();
     return;
   }
@@ -229,6 +239,88 @@ document.getElementById('projectList').addEventListener('change', async function
       btn.disabled = false;
       btn.textContent = originalLabel;
       importInput.value = '';
+    }
+    return;
+  }
+
+  const syncFileInput = e.target.closest('[data-sync-file]');
+  if(syncFileInput){
+    const id = syncFileInput.getAttribute('data-sync-file');
+    const file = syncFileInput.files[0];
+    const statusEl = document.querySelector('[data-status-for="' + CSS.escape(id) + '"]');
+    const btn = document.querySelector('[data-sync="' + CSS.escape(id) + '"]');
+    if(!file) return;
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    if(statusEl) statusEl.textContent = 'Reading file…';
+    try{
+      const buf = await file.arrayBuffer();
+      const workbook = XLSX.read(buf, {type: 'array'});
+      const newDevices = parseWorkbook(workbook);
+
+      // Preview what would actually be deleted before committing to
+      // anything — computed the same way the server will, so the
+      // confirmation reflects reality rather than a guess. The server
+      // still independently recomputes this itself; nothing here is
+      // trusted as the source of truth for the actual deletion.
+      if(statusEl) statusEl.textContent = 'Checking what would change…';
+      const current = await adminFetch('/api/devices?project=' + encodeURIComponent(id), {method: 'GET'});
+      const currentDevices = current.devices || [];
+
+      const newIds = new Set(newDevices.map(function(d){ return d.id; }));
+      const newLocations = new Set(newDevices.map(function(d){ return d.location; }).filter(Boolean));
+
+      const toDelete = currentDevices.filter(function(d){ return !newIds.has(d.id); });
+
+      const currentCountByLoc = {};
+      currentDevices.forEach(function(d){
+        if(!d.location) return;
+        currentCountByLoc[d.location] = (currentCountByLoc[d.location] || 0) + 1;
+      });
+      const locsToRemove = Object.keys(currentCountByLoc).filter(function(loc){
+        return currentCountByLoc[loc] > 0 && !newLocations.has(loc);
+      });
+
+      let confirmMsg = 'Sync devices for "' + id + '" from ' + file.name + '?\n\n' +
+        'This adds/updates ' + newDevices.length + ' device' + (newDevices.length===1?'':'s') + ' from the file.\n\n';
+
+      if(toDelete.length){
+        const preview = toDelete.slice(0, 15).map(function(d){ return d.name || d.id; }).join(', ') + (toDelete.length > 15 ? ', …' : '');
+        confirmMsg += 'It will DELETE ' + toDelete.length + ' device' + (toDelete.length===1?'':'s') + ' not in the file: ' + preview + '\n\n';
+      } else {
+        confirmMsg += 'No devices will be deleted — everything currently in this project is also in the file.\n\n';
+      }
+
+      if(locsToRemove.length){
+        confirmMsg += 'It will also remove ' + locsToRemove.length + ' location' + (locsToRemove.length===1?'':'s') + ' no longer used: ' + locsToRemove.join(', ') + '\n\n';
+      }
+
+      confirmMsg += 'Punch list history is never deleted, even for a removed device. This can\'t be undone otherwise.';
+
+      if(!confirm(confirmMsg)){
+        syncFileInput.value = '';
+        btn.disabled = false;
+        return;
+      }
+
+      if(statusEl) statusEl.textContent = 'Syncing…';
+      const result = await adminFetch('/api/admin/projects/sync-devices', {
+        method: 'POST',
+        body: JSON.stringify({id: id, devices: newDevices})
+      });
+      if(statusEl) statusEl.textContent =
+        'Synced: ' + result.deviceCount + ' device' + (result.deviceCount===1?'':'s') + ' added/updated, ' +
+        result.devicesDeleted + ' removed, ' + result.locationsDeleted + ' location' + (result.locationsDeleted===1?'':'s') + ' removed.';
+      setTimeout(loadProjectList, 5000);
+    }catch(e){
+      console.error(e);
+      if(statusEl) statusEl.textContent = '';
+      alert('Could not sync devices: ' + e.message);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      syncFileInput.value = '';
     }
     return;
   }
