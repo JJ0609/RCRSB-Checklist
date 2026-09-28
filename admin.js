@@ -368,26 +368,83 @@ document.getElementById('projectList').addEventListener('change', async function
      }
 });
 // ---------- project access (who sees what) ----------
+let accessRows = [];             // raw grants from the server, cached client-side
+let accessGroupBy = 'project';   // 'project' | 'email' — resets to project on page load
+
 async function loadAccessList(){
   const el = document.getElementById('accessList');
   el.textContent = 'Loading…';
   try{
     const data = await adminFetch('/api/admin/access', {method: 'GET'});
-    const rows = data.access || [];
-    if(!rows.length){
-      el.innerHTML = '<div class="field-hint">No grants yet — every project is visible to everyone.</div>';
-      return;
-    }
-    el.innerHTML = rows.map(function(r){
-      return '<div class="admin-row">'
-        + '<div><div class="name">' + esc(r.email) + '</div>'
-        + '<div class="meta">' + esc(r.projectName) + ' (' + esc(r.projectId) + ') &middot; added by ' + esc(r.addedBy || '') + '</div></div>'
-        + '<button class="btn" data-revoke-project="' + esc(r.projectId) + '" data-revoke-email="' + esc(r.email) + '" style="border-color:var(--fail);color:var(--fail);">Revoke</button>'
-        + '</div>';
-    }).join('');
+    accessRows = data.access || [];
+    renderAccessList();
   }catch(e){
     el.innerHTML = '<div class="field-hint">Couldn\'t load the access list.</div>';
   }
+}
+
+// Grouped by project or by person — never a flat time-ordered list, so
+// this stays scannable as grants accumulate. Both the grouping and the
+// order within each group are alphabetical, not chronological; addedAt
+// still shows per-row but no longer drives the structure.
+function renderAccessList(){
+  const el = document.getElementById('accessList');
+  let html = '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+    + '<button class="chip' + (accessGroupBy==='project'?' active':'') + '" data-access-group="project">Group by Project</button>'
+    + '<button class="chip' + (accessGroupBy==='email'?' active':'') + '" data-access-group="email">Group by Email</button>'
+    + '</div>';
+
+  if(!accessRows.length){
+    html += '<div class="field-hint">No grants yet — every project is visible to everyone.</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  function groupHeader(title, sub, count, singular, plural){
+    return '<div style="display:flex;align-items:baseline;gap:8px;margin:0 0 6px;padding-top:12px;border-top:1px solid var(--border);">'
+      + '<div style="font-weight:800;font-size:13.5px;">' + esc(title) + '</div>'
+      + (sub ? '<div style="font-size:11px;color:var(--ink-soft);">' + esc(sub) + '</div>' : '')
+      + '<div style="font-size:11px;color:var(--ink-soft);margin-left:auto;">' + count + ' ' + (count===1?singular:plural) + '</div>'
+      + '</div>';
+  }
+  function grantRow(primaryText, secondaryText, projectId, email){
+    return '<div class="admin-row" style="padding:7px 0;">'
+      + '<div><div class="name" style="font-size:13px;">' + esc(primaryText) + '</div>'
+      + '<div class="meta">' + esc(secondaryText) + '</div></div>'
+      + '<button class="btn" data-revoke-project="' + esc(projectId) + '" data-revoke-email="' + esc(email) + '" style="border-color:var(--fail);color:var(--fail);padding:5px 11px;font-size:12px;">Revoke</button>'
+      + '</div>';
+  }
+
+  if(accessGroupBy === 'project'){
+    const groups = {};
+    accessRows.forEach(function(r){
+      if(!groups[r.projectId]) groups[r.projectId] = {name: r.projectName, rows: []};
+      groups[r.projectId].rows.push(r);
+    });
+    Object.keys(groups).sort(function(a,b){ return groups[a].name.localeCompare(groups[b].name); }).forEach(function(pid){
+      const g = groups[pid];
+      const rows = g.rows.slice().sort(function(a,b){ return a.email.localeCompare(b.email); });
+      html += groupHeader(g.name, pid, rows.length, 'person', 'people');
+      rows.forEach(function(r){
+        html += grantRow(r.email, 'added by ' + (r.addedBy || ''), r.projectId, r.email);
+      });
+    });
+  } else {
+    const groups = {};
+    accessRows.forEach(function(r){
+      if(!groups[r.email]) groups[r.email] = [];
+      groups[r.email].push(r);
+    });
+    Object.keys(groups).sort().forEach(function(email){
+      const rows = groups[email].slice().sort(function(a,b){ return a.projectName.localeCompare(b.projectName); });
+      html += groupHeader(email, '', rows.length, 'project', 'projects');
+      rows.forEach(function(r){
+        html += grantRow(r.projectName, r.projectId + ' &middot; added by ' + (r.addedBy || ''), r.projectId, r.email);
+      });
+    });
+  }
+
+  el.innerHTML = html;
 }
 document.getElementById('grantBtn').addEventListener('click', async function(){
   const emailInput = document.getElementById('grantEmail');
@@ -423,6 +480,13 @@ document.getElementById('grantBtn').addEventListener('click', async function(){
   }
 });
 document.getElementById('accessList').addEventListener('click', async function(e){
+  const groupBtn = e.target.closest('[data-access-group]');
+  if(groupBtn){
+    accessGroupBy = groupBtn.getAttribute('data-access-group');
+    renderAccessList();
+    return;
+  }
+
   const btn = e.target.closest('[data-revoke-project]');
   if(!btn) return;
   const projectId = btn.getAttribute('data-revoke-project');
