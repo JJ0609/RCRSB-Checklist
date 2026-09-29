@@ -10,6 +10,19 @@ let activeRegion = '';   // '' = all regions; resets on every page load
 let statusFilter = 'active';
 const UNSPECIFIED = 'Unspecified';
 
+// Which side of each project this session is working with — chosen at
+// login (see login.js) and stored alongside the email. Projects
+// themselves are shared between sides; only the device counts here,
+// and everything inside a project, are scoped by it. Anything
+// unrecognized falls back to AV, the original and default side.
+function currentDeviceType(){
+  try{
+    return sessionStorage.getItem('pd_device_type') === 'lc' ? 'lc' : 'av';
+  }catch(e){ return 'av'; }
+}
+const DEVICE_TYPE = currentDeviceType();
+const DEVICE_TYPE_LABEL = DEVICE_TYPE === 'lc' ? 'LC' : 'AV';
+
 function syncConfigured(){
   return typeof SYNC_API_BASE !== 'undefined' && SYNC_API_BASE && SYNC_API_BASE.indexOf('REPLACE-WITH') === -1;
 }
@@ -56,6 +69,11 @@ function renderRegionFilter(){
     }).join('');
 }
 
+// Counts reflect every project this account can see (matching the
+// server's email-based filtering already applied to allProjects),
+// independent of search/region — so the tab counts don't shift around
+// confusingly while someone's mid-search, the same way an inbox's
+// unread count doesn't change while you're searching your email.
 function renderStatusFilterButtons(){
   const activeCount = allProjects.filter(function(p){return !p.archived; }).length;
   const archivedCount = allProjects.filter(function(p){ return p.archived; }).length;
@@ -126,7 +144,7 @@ function render(){
   });
 
   function cardHtml(p){
-    return '<a class="loc-card" href="index.html?project=' + encodeURIComponent(p.id) + '" style="text-decoration:none;display:block;">'
+    return '<a class="loc-card" href="index.html?project=' + encodeURIComponent(p.id) + '&type=' + DEVICE_TYPE + '" style="text-decoration:none;display:block;">'
       + '<div class="name">' + esc(p.name) + '</div>'
       + '<div class="meta">' + esc(p.shortName || '') + (p.shortName ? ' &middot; ' : '') + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + '</div>'
       + '</a>';
@@ -163,7 +181,7 @@ async function loadProjects(){
   content.innerHTML = '<div class="empty" style="padding:60px 20px;">Loading projects&hellip;</div>';
   try{
     const email = (sessionStorage.getItem('pd_user_email') || '').trim();
-    const url = SYNC_API_BASE.replace(/\/$/, '') + '/api/projects?email=' + encodeURIComponent(email);
+    const url = SYNC_API_BASE.replace(/\/$/, '') + '/api/projects?email=' + encodeURIComponent(email) + '&deviceType=' + DEVICE_TYPE;
     const res = await fetch(url);
     if(!res.ok) throw new Error('Request failed (' + res.status + ')');
     const data = await res.json();
@@ -184,5 +202,41 @@ document.getElementById('searchInput').addEventListener('input', function(e){
   searchQuery = e.target.value;
   render();
 });
+
+// Heading + the two session controls. Switching sides just flips the
+// stored side and reloads — the person is already identified by email,
+// so nothing is bypassed; it's the same login viewed from the other
+// side. Log out clears everything (including a cached admin password,
+// which would otherwise linger on a shared computer) and returns to login.
+(function setupHeader(){
+  const title = document.getElementById('pageTitle');
+  if(title) title.textContent = DEVICE_TYPE_LABEL + ' Projects';
+  document.title = DEVICE_TYPE_LABEL + ' Projects';
+
+  const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
+  const switchLink = document.getElementById('switchSideLink');
+  if(switchLink){
+    switchLink.textContent = 'Switch to ' + other.toUpperCase();
+    switchLink.addEventListener('click', function(e){
+      e.preventDefault();
+      try{ sessionStorage.setItem('pd_device_type', other); }catch(err){}
+      window.location.reload();
+    });
+  }
+
+  const logoutLink = document.getElementById('logoutLink');
+  if(logoutLink){
+    logoutLink.addEventListener('click', function(e){
+      e.preventDefault();
+      try{
+        sessionStorage.removeItem('pd_user_email');
+        sessionStorage.removeItem('pd_tech_name');
+        sessionStorage.removeItem('pd_device_type');
+        sessionStorage.removeItem('pd_admin_pw');
+      }catch(err){}
+      window.location.replace('login.html');
+    });
+  }
+})();
 
 loadProjects();

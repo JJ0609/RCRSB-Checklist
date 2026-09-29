@@ -20,6 +20,24 @@ const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration'];
 // location name (those always come from actual devices/locations).
 const PROJECT_WIDE_SCOPE = '__PROJECT_WIDE__';
 
+// Which side of the project this page is showing: "av" (the original
+// side) or "lc" (Local Cresnet / lighting control). Same project either
+// way — the two sides just have separate devices, locations, checklist
+// status, and punch items. The link that got here says which (?type=),
+// falling back to the side chosen at login; whichever wins is written
+// back to the session so the switcher, the projects page, and this page
+// always agree about where the person is.
+function resolveDeviceType(){
+  let fromUrl = null, fromSession = null;
+  try{ fromUrl = new URLSearchParams(window.location.search).get('type'); }catch(e){}
+  try{ fromSession = sessionStorage.getItem('pd_device_type'); }catch(e){}
+  const t = (fromUrl === 'lc' || fromUrl === 'av') ? fromUrl : (fromSession === 'lc' ? 'lc' : 'av');
+  try{ sessionStorage.setItem('pd_device_type', t); }catch(e){}
+  return t;
+}
+const DEVICE_TYPE = resolveDeviceType();
+const DEVICE_TYPE_LABEL = DEVICE_TYPE === 'lc' ? 'LC' : 'AV';
+
 let currentProject = null;   // set from the ?project= URL param at boot
 let currentProjectMeta = { name: '', shortName: '' };
 let DEVICES = [];
@@ -77,7 +95,7 @@ function rebuildDeviceIndexes(){
 
 function loadCache(){
   try{
-    const raw = localStorage.getItem('pd_commissioning_cache_' + currentProject);
+    const raw = localStorage.getItem('pd_commissioning_cache_' + currentProject + '_' + DEVICE_TYPE);
     if(raw){
       const parsed = JSON.parse(raw);
       checklist = parsed.checklist || {};
@@ -87,7 +105,7 @@ function loadCache(){
 }
 function saveCache(){
   try{
-    localStorage.setItem('pd_commissioning_cache_' + currentProject, JSON.stringify({checklist:checklist, punches:punches}));
+    localStorage.setItem('pd_commissioning_cache_' + currentProject + '_' + DEVICE_TYPE, JSON.stringify({checklist:checklist, punches:punches}));
   }catch(e){}
 }
 
@@ -309,15 +327,21 @@ function deviceDraftField(id, label, placeholder, maxlength){
 
 function addDeviceFormHtml(){
   let html = '<div class="punch-form" style="margin-top:10px;">';
-  html += deviceDraftField('name', 'Device Name (Required)', 'e.g. R1-TV1-01');
-  html += deviceDraftField('model', 'Manufacturer | Model', 'e.g. Sony | XR-65X90L');
+  html += deviceDraftField('name', 'Device Name (Required)', DEVICE_TYPE === 'lc' ? 'e.g. Lighting Processor 1' : 'e.g. R1-TV1-01');
+  html += deviceDraftField('model', DEVICE_TYPE === 'lc' ? 'Model #' : 'Manufacturer | Model', DEVICE_TYPE === 'lc' ? 'e.g. CLW-DIMEX-P' : 'e.g. Sony | XR-65X90L');
   html += deviceDraftField('ip', 'IP Address', 'e.g. 10.0.1.20');
   html += deviceDraftField('ipid', 'IP ID');
-  html += deviceDraftField('zone', 'Zone');
-  html += deviceDraftField('channel', 'Amp Channel');
+  if(DEVICE_TYPE === 'lc'){
+    html += deviceDraftField('dinRail', 'DIN Rail', 'e.g. Panel B, Slot 4');
+    html += deviceDraftField('connection', 'Connection', 'e.g. Cresnet');
+    html += deviceDraftField('cresnetDevices', 'Local Cresnet Devices');
+  } else {
+    html += deviceDraftField('zone', 'Zone');
+  }
+  if(DEVICE_TYPE !== 'lc') html += deviceDraftField('channel', 'Amp Channel');
   html += deviceDraftField('status', 'Status');
   html += deviceDraftField('level', 'Level');
-  html += deviceDraftField('avio', 'AV I/O');
+  if(DEVICE_TYPE !== 'lc') html += deviceDraftField('avio', 'AV I/O');
   html += deviceDraftField('note', 'Note');
   html += '<div class="form-actions">' 
   + '<button class="btn ghost" id="cancelAddDevice">Cancel</button>' 
@@ -382,6 +406,9 @@ function deviceCardHtml(d, showLocation){
   if(d.ipid) html += '<span>ID <b>' + esc(d.ipid) + '</b></span>';
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
+  if(d.dinRail) html += '<span>Rail <b>' + esc(d.dinRail) + '</b></span>';
+  if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
+  if(d.cresnetDevices) html += '<span>Cresnet <b>' + esc(d.cresnetDevices) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
@@ -537,15 +564,15 @@ async function apiCall(path, options){
 }
 
 async function fetchRemoteState(){
-  return apiCall('/api/state?project=' + encodeURIComponent(currentProject), {method: 'GET'});
+  return apiCall('/api/state?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE, {method: 'GET'});
 }
 
 async function fetchDevicesAndMeta(){
-  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject), {method: 'GET'});
+  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE, {method: 'GET'});
 }
 
 function deviceCacheKey(){
-  return 'pd_devices_cache_' + currentProject;
+  return 'pd_devices_cache_' + currentProject + '_' + DEVICE_TYPE;
 }
 function saveDeviceCache(meta, devices, locations){
   try{
@@ -576,7 +603,8 @@ async function pushPunch(item){
     body: JSON.stringify({
       project: currentProject, deviceId: item.deviceId, deviceName: item.deviceName,
       location: item.location, description: item.description, severity: item.severity, ownership: item.ownership,
-      reportedBy: item.reportedBy
+      reportedBy: item.reportedBy,
+      deviceType: item.deviceType || DEVICE_TYPE
     })
   });
 }
@@ -584,14 +612,14 @@ async function pushPunch(item){
 async function pushAddLocation(name){
   return apiCall('/api/location', {
     method: 'POST',
-    body: JSON.stringify({project: currentProject, name: name, actorName: techName || 'Unnamed tech'})
+    body: JSON.stringify({project: currentProject, name: name, actorName: techName || 'Unnamed tech', deviceType: DEVICE_TYPE})
   });
 }
 
 async function pushAddDevice(fields){
   return apiCall('/api/device', {
     method: 'POST',
-    body: JSON.stringify(Object.assign({project: currentProject, actorName: techName || 'Unnamed tech'},
+    body: JSON.stringify(Object.assign({project: currentProject, actorName: techName || 'Unnamed tech', deviceType: DEVICE_TYPE},
       fields))
   });
 }
@@ -690,7 +718,8 @@ async function submitAddDevice(){
     location: location,
     name: getVal('name'), model: getVal('model'), ip: getVal('ip'), ipid: getVal('ipid'),
     zone: getVal('zone'), channel: getVal('channel'), status: getVal('status'), level: getVal('level'),
-    avio: getVal('avio'), note: getVal('note')
+    avio: getVal('avio'), note: getVal('note'),
+    dinRail: getVal('dinRail'), connection: getVal('connection'), cresnetDevices: getVal('cresnetDevices')
   };
   if(!fields.name){ alert('Device name is required.'); return; }
   const btn = document.getElementById('submitAddDevice');
@@ -700,7 +729,7 @@ async function submitAddDevice(){
     DEVICES.push({
       id: result.id, name: fields.name, status: fields.status, level: fields.level, location: location,
       zone: fields.zone, channel: fields.channel, model: fields.model, ip: fields.ip, ipid: fields.ipid,
-      avio: fields.avio, note: fields.note, ports: []
+      avio: fields.avio, note: fields.note, dinRail: fields.dinRail, connection: fields.connection, cresnetDevices: fields.cresnetDevices, ports: []
     });
     addingDeviceFor = null;
     deviceDraft = {};
@@ -752,7 +781,7 @@ function submitPunch(deviceId){
   if(!desc) return;
   const tempId = 'local-' + Date.now();
   const item = {
-    id: tempId, deviceId: deviceId, deviceName: dev.name, location: dev.location,
+    id: tempId, deviceId: deviceId, deviceName: dev.name, location: dev.location, deviceType: DEVICE_TYPE,
     description: desc, severity: pendingSeverity, ownership: pendingOwnership, status: 'open',
     reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
   };
@@ -774,7 +803,7 @@ function submitLocationPunch(){
   const tempId = 'local-' + Date.now();
   const isProjectWide = addingLocationPunchFor === PROJECT_WIDE_SCOPE;
   const item = {
-    id: tempId, deviceId: null, deviceName: '', location: isProjectWide ? '' : addingLocationPunchFor,
+    id: tempId, deviceId: null, deviceName: '', location: isProjectWide ? '' : addingLocationPunchFor, deviceType: DEVICE_TYPE,
     description: desc, severity: pendingSeverity, ownership: pendingOwnership, status: 'open',
     reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
   };
@@ -838,7 +867,7 @@ async function exportCsv(){
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'rcrsb-punch-list.csv';
+    a.download = 'rcrsb-punch-list' + (DEVICE_TYPE === 'lc' ? '-lc' : '') + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -940,9 +969,9 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:R1');
+    ws.mergeCells('A1:' + (DEVICE_TYPE === 'lc' ? 'U' : 'R') + '1');
     const title = ws.getCell('A1');
-    title.value = projectDisplayName + ' — Device Report';
+    title.value = projectDisplayName + ' — ' + (DEVICE_TYPE === 'lc' ? 'LC ' : '') + 'Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
     ws.getRow(1).height = 32;
 
@@ -950,6 +979,7 @@ async function exportDeviceReport(){
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
     const deviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
+    if(DEVICE_TYPE === 'lc') deviceHeaders.push('DIN Rail','Connection','Local Cresnet Devices');
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
@@ -999,10 +1029,19 @@ async function exportDeviceReport(){
       const noteAtCell = row.getCell(18);
       noteAtCell.value = formatEasternTime(d.noteUpdatedAt);
       noteAtCell.fill = xlFill(band);
+      if(DEVICE_TYPE === 'lc'){
+        [d.dinRail, d.connection, d.cresnetDevices].forEach(function(v, i){
+          const cell = row.getCell(19 + i);
+          cell.value = v || '';
+          cell.fill = xlFill(band);
+        });
+      }
       r++;
     });
 
-    ws.columns = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
+    const devWidths = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
+    if(DEVICE_TYPE === 'lc') devWidths.push({width:22},{width:16},{width:26});
+    ws.columns = devWidths;
     ws.views = [{state:'frozen', ySplit:3}];
 
     // ---- Sheet 2: Punch List ----
@@ -1082,7 +1121,7 @@ async function exportDeviceReport(){
     const blob = new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url = URL.createObjectURL(blob);
     const dateStr = new Date().toISOString().slice(0,10);
-    const filename = sanitizeFilenamePart(projectDisplayName) + '_InfoSheet_' + dateStr + '.xlsx';
+    const filename = sanitizeFilenamePart(projectDisplayName) + (DEVICE_TYPE === 'lc' ? '_LC' : '') + '_InfoSheet_' + dateStr + '.xlsx';
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -1370,10 +1409,10 @@ async function boot(){
   }
 
   rebuildDeviceIndexes();
-  document.getElementById('projTitle').textContent = 'Systems Commissioning';
+  document.getElementById('projTitle').textContent = DEVICE_TYPE_LABEL + ' Commissioning';
   document.getElementById('projSub').textContent =
     (currentProjectMeta.shortName || currentProjectMeta.name) + ' · ' + currentProjectMeta.name;
-  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' Commissioning';
+  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' Systems Commissioning';
 
   loadCache();
   renderContent();
@@ -1385,5 +1424,37 @@ async function boot(){
   syncFromRemote();
   pollTimer = setInterval(syncFromRemote, SYNC_POLL_MS);
 }
+
+// Side switcher + logout. Switching stays in the SAME project — it just
+// opens the project's other side — and the person is already identified
+// by email, so nothing is bypassed. An unsent punch draft still gets the
+// existing beforeunload warning, same as any other way of leaving this
+// page. Log out clears everything, including a cached admin password
+// that would otherwise linger on a shared computer.
+(function setupSessionControls(){
+  const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
+  const switchLink = document.getElementById('switchSideLink');
+  if(switchLink){
+    switchLink.textContent = 'Switch to ' + other.toUpperCase();
+    switchLink.addEventListener('click', function(e){
+      e.preventDefault();
+      try{ sessionStorage.setItem('pd_device_type', other); }catch(err){}
+      window.location.href = 'index.html?project=' + encodeURIComponent(currentProject || '') + '&type=' + other;
+    });
+  }
+  const logoutLink = document.getElementById('logoutLink');
+  if(logoutLink){
+    logoutLink.addEventListener('click', function(e){
+      e.preventDefault();
+      try{
+        sessionStorage.removeItem('pd_user_email');
+        sessionStorage.removeItem('pd_tech_name');
+        sessionStorage.removeItem('pd_device_type');
+        sessionStorage.removeItem('pd_admin_pw');
+      }catch(err){}
+      window.location.replace('login.html');
+    });
+  }
+})();
 
 boot();

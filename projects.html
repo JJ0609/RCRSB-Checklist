@@ -26,7 +26,9 @@
 // identity attached, and the project picker needs to know whos asking.
 (function(){
   try{
-    if(!sessionStorage.getItem('pd_user_email')){
+    //A commplete login is an email AND a chosen side (AV/LC), an email
+    // alone goes back to login
+    if(!sessionStorage.getItem('pd_user_email') || !sessionStorage.getItem('pd_device_type')){
       var here = window.location.pathname.split('/').pop() + window.location.search;
       window.location.replace('login.html?redirect=' + encodeURIComponent(here));
     }
@@ -46,8 +48,8 @@
       <img class="logo-mark logo-for-light" src="power-design-logo-black.png" alt="Power Design">
       <img class="logo-mark logo-for-dark" src="power-design-logo-white.png" alt="Power Design">
       <div class="topbar-titles">
-        <div class="proj">Systems Commissioning</div>
-        <div class="sub">Choose a project &middot; <a class="projects-link" href="admin.html">Admin</a></div>
+        <div class="proj" id="pageTitle">Projects</div>
+        <div class="sub">Choose a project &middot; <a class="projects-link" href="admin.html">Admin</a> &middot; <a class="projects-link" href="#" id="switchSideLink">Switch Side</a> &middot; <a class="projects-link" href="#" id="logoutLink">Log out</a></a></div>
       </div>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle light/dark mode"></button>
     </div>
@@ -55,9 +57,9 @@
       <input class="searchbox" id="searchInput" type="text" placeholder="Search projects&hellip;">
     </div>
     <div class="punch-toolbar">
+      <select id="regionFilter"><option value="">All Regions</option></select>
       <button class="project-filter-button project-filter-button-active" data-status-filter="active">Active</button>
       <button class="project-filter-button" data-status-filter="archived">Archived</button>
-      <select id="regionFilter"><option value="">All Regions</option></select>
     </div>
   </div>
 

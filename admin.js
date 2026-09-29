@@ -87,10 +87,18 @@ document.getElementById('pwInput').addEventListener('keydown', function(e){
 // ---------- project list ----------
 async function loadProjectList(){
   const el = document.getElementById('projectList');
-  el.textContent = 'Loading…';
+  el.textContent = 'Loading...';
   try{
-    const data = await adminFetch('/api/projects', {method: 'GET'});
-    const projects = data.projects || [];
+    // Device counts are per side now (one project can have AV devices, LC
+    // devices, or both), so fetch both and show each — otherwise a project
+    // that only has LC gear would read "0 devices" right after an LC upload.
+    const sides = await Promise.all([
+      adminFetch('/api/projects?deviceType=av', {method: 'GET'}),
+      adminFetch('/api/projects?deviceType=lc', {method: 'GET'})
+    ]);
+    const projects = sides[0].projects || [];
+    const lcCounts = {};
+    (sides[1].projects || []).forEach(function(p){ lcCounts[p.id] = p.deviceCount; });
     window._pdProjects = projects; // stashed for the access-grant dropdown
     populateGrantProjectDropdown(projects);
     if(!projects.length){
@@ -102,15 +110,15 @@ async function loadProjectList(){
       const accessSummary = emails.length ? ('Visible to ' + emails.length + ' email' + (emails.length===1?'':'s')) : 'Visible to everyone';
       return '<div class="admin-row">'
         + '<div><div class="name">' + esc(p.name) + (p.archived ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">(Archived)</span>' : '') + '</div>'
-        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + ' &middot; ' + esc(accessSummary) + '</div>'
+        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' AV &middot; ' + (lcCounts[p.id] || 0) + ' LC' + ' &middot; ' + esc(accessSummary) + '</div>'
         + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
         + '<div style="display:flex;gap:8px;flex:none;">'
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-sync-file="' + esc(p.id) + '" style="display:none;">'
-        + '<button class="btn" data-update="' + esc(p.id) + '">Update Devices</button>'
+        + '<button class="btn" data-update="' + esc(p.id) + '" title="Detects AV or LC automatically from the sheet the file contains">Update Devices</button>'
         + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
-        + '<button class="btn" data-sync="' + esc(p.id) + '" style="border-color:var(--open);color:var(--open);" title="Adds/updates devices AND removes any device or location missing from the file">Sync Devices (removes missing)</button>'
+        + '<button class="btn" data-sync="' + esc(p.id) + '" style="border-color:var(--open);color:var(--open);" title="Detects AV or LC automatically. Adds/updates devices AND removes any device or location missing from the file">Sync Devices (removes missing)</button>'
         + '<button class="btn" data-archive="' + esc(p.id) + '" data-currently-archived="' + (p.archived ? '1' : '0') + '">' + (p.archived ? 'Unarchive' : 'Archive') + '</button>'
         + '<button class="btn" data-delete="' + esc(p.id) + '" style="border-color:var(--fail);color:var(--fail);">Delete</button>'
         + '</div>'
@@ -153,7 +161,7 @@ document.getElementById('projectList').addEventListener('click', async function(
     const id = delBtn.getAttribute('data-delete');
     if(!confirm('Delete project "' + id + '"? This permanently removes its device list, checklist, and punch list. This can\'t be undone.')) return;
     delBtn.disabled = true;
-    delBtn.textContent = 'Deleting…';
+    delBtn.textContent = 'Deleting...';
     try{
       await adminFetch('/api/admin/projects/delete', {method: 'POST', body: JSON.stringify({id: id})});
       loadProjectList();
@@ -214,13 +222,13 @@ document.getElementById('projectList').addEventListener('change', async function
 
     btn.disabled = true;
     const originalLabel = btn.textContent;
-    if(statusEl) statusEl.textContent = 'Reading file…';
+    if(statusEl) statusEl.textContent = 'Reading file...';
     try{
       const buf = await file.arrayBuffer();
       const workbook = XLSX.read(buf, {type: 'array'});
       const rows = parseDeviceReportForSync(workbook);
       const punchRows = parsePunchListForSync(workbook);
-      if(statusEl) statusEl.textContent = 'Uploading ' + rows.length + ' device rows and ' + punchRows.length + ' punch rows…';
+      if(statusEl) statusEl.textContent = 'Uploading ' + rows.length + ' device rows and ' + punchRows.length + ' punch rows...';
       const result = await adminFetch('/api/admin/projects/import-results', {
         method: 'POST',
         body: JSON.stringify({id: id, rows: rows, punches: punchRows})
@@ -253,19 +261,21 @@ document.getElementById('projectList').addEventListener('change', async function
 
     btn.disabled = true;
     const originalLabel = btn.textContent;
-    if(statusEl) statusEl.textContent = 'Reading file…';
+    if(statusEl) statusEl.textContent = 'Reading file...';
     try{
       const buf = await file.arrayBuffer();
       const workbook = XLSX.read(buf, {type: 'array'});
-      const newDevices = parseWorkbook(workbook);
+      const deviceType = detectDeviceType(workbook);
+      const newDevices = deviceType === 'lc' ? parseLcsWorkbook(workbook) : parseWorkbook(workbook);
+      const typeLabel = deviceType === 'lc' ? 'LC' : 'AV';
 
       // Preview what would actually be deleted before committing to
       // anything — computed the same way the server will, so the
       // confirmation reflects reality rather than a guess. The server
       // still independently recomputes this itself; nothing here is
       // trusted as the source of truth for the actual deletion.
-      if(statusEl) statusEl.textContent = 'Checking what would change…';
-      const current = await adminFetch('/api/devices?project=' + encodeURIComponent(id), {method: 'GET'});
+      if(statusEl) statusEl.textContent = 'Checking what would change...';
+      const current = await adminFetch('/api/devices?project=' + encodeURIComponent(id) + '&deviceType=' + deviceType, {method: 'GET'});
       const currentDevices = current.devices || [];
 
       const newIds = new Set(newDevices.map(function(d){ return d.id; }));
@@ -282,12 +292,13 @@ document.getElementById('projectList').addEventListener('change', async function
         return currentCountByLoc[loc] > 0 && !newLocations.has(loc);
       });
 
-      let confirmMsg = 'Sync devices for "' + id + '" from ' + file.name + '?\n\n' +
-        'This adds/updates ' + newDevices.length + ' device' + (newDevices.length===1?'':'s') + ' from the file.\n\n';
+      let confirmMsg = 'Detected ' + typeLabel + ' devices. Sync ' + typeLabel + ' devices for "' + id + '" from ' + file.name + '?\n\n' +
+        'This adds/updates ' + newDevices.length + ' ' + typeLabel + ' device' + (newDevices.length===1?'':'s') + ' from the file.' +
+        (typeLabel === 'LC' ? ' AV devices in this project are never affected.' : ' LC devices in this project are never affected.') + '\n\n';
 
       if(toDelete.length){
-        const preview = toDelete.slice(0, 15).map(function(d){ return d.name || d.id; }).join(', ') + (toDelete.length > 15 ? ', …' : '');
-        confirmMsg += 'It will DELETE ' + toDelete.length + ' device' + (toDelete.length===1?'':'s') + ' not in the file: ' + preview + '\n\n';
+        const preview = toDelete.slice(0, 15).map(function(d){ return d.name || d.id; }).join(', ') + (toDelete.length > 15 ? ', ...' : '');
+        confirmMsg += 'It will DELETE ' + toDelete.length + ' ' + typeLabel + ' device' + (toDelete.length===1?'':'s') + ' not in the file: ' + preview + '\n\n';
       } else {
         confirmMsg += 'No devices will be deleted — everything currently in this project is also in the file.\n\n';
       }
@@ -304,13 +315,13 @@ document.getElementById('projectList').addEventListener('change', async function
         return;
       }
 
-      if(statusEl) statusEl.textContent = 'Syncing…';
+      if(statusEl) statusEl.textContent = 'Syncing...';
       const result = await adminFetch('/api/admin/projects/sync-devices', {
         method: 'POST',
-        body: JSON.stringify({id: id, devices: newDevices})
+        body: JSON.stringify({id: id, devices: newDevices, deviceType: deviceType})
       });
       if(statusEl) statusEl.textContent =
-        'Synced: ' + result.deviceCount + ' device' + (result.deviceCount===1?'':'s') + ' added/updated, ' +
+        'Synced ' + typeLabel + ': ' + result.deviceCount + ' device' + (result.deviceCount===1?'':'s') + ' added/updated, ' +
         result.devicesDeleted + ' removed, ' + result.locationsDeleted + ' location' + (result.locationsDeleted===1?'':'s') + ' removed.';
       setTimeout(loadProjectList, 5000);
     }catch(e){
@@ -333,29 +344,36 @@ document.getElementById('projectList').addEventListener('change', async function
   const btn = document.querySelector('[data-update="' + CSS.escape(id) + '"]');
   if(!file) return;
 
-  if(!confirm(
-    'Re-import devices for "' + id + '" from ' + file.name + '?\n\n' +
-    'This adds new devices and updates matching existing ones (by device ID). ' +
-    'It will NOT delete any device or touch existing checklist/punch data — ' +
-    'even devices missing from this file are left as-is.'
-  )){
-    fileInput.value = '';
-    return;
-  }
-
   btn.disabled = true;
   const originalLabel = btn.textContent;
-  if(statusEl) statusEl.textContent = 'Reading file…';
+  if(statusEl) statusEl.textContent = 'Reading file...';
   try{
     const buf = await file.arrayBuffer();
     const workbook = XLSX.read(buf, {type: 'array'});
-    const devices = parseWorkbook(workbook);
-    if(statusEl) statusEl.textContent = 'Uploading ' + devices.length + ' devices…';
+    const deviceType = detectDeviceType(workbook);
+    const typeLabel = deviceType === 'lc' ? 'LC' : 'AV';
+    const devices = deviceType === 'lc' ? parseLcsWorkbook(workbook) : parseWorkbook(workbook);
+
+    if(!confirm(
+      'Detected ' + typeLabel + ' devices. Re-import ' + typeLabel + ' devices for "' + id + '" from ' + file.name + '?\n\n' +
+      'This adds new devices and updates matching existing ones (by device ID). ' +
+      'It will NOT delete any device or touch existing checklist/punch data — ' +
+      'even devices missing from this file are left as-is. ' +
+      (typeLabel === 'LC' ? 'AV devices in this project are never affected.' : 'LC devices in this project are never affected.')
+    )){
+      fileInput.value = '';
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      if(statusEl) statusEl.textContent = '';
+      return;
+    }
+
+    if(statusEl) statusEl.textContent = 'Uploading ' + devices.length + ' ' + typeLabel + ' devices...';
     const result = await adminFetch('/api/admin/projects/update-devices', {
       method: 'POST',
-      body: JSON.stringify({id: id, devices: devices})
+      body: JSON.stringify({id: id, devices: devices, deviceType: deviceType})
     });
-    if(statusEl) statusEl.textContent = 'Updated ' + result.deviceCount + ' devices just now.';
+    if(statusEl) statusEl.textContent = 'Updated ' + result.deviceCount + ' ' + typeLabel + ' devices just now.';
     setTimeout(loadProjectList, 5000);
   }catch(e){
     console.error(e);
@@ -374,7 +392,7 @@ let expandedAccessGroup = null;  // key of the one open accordion card, or null
 
 async function loadAccessList(){
   const el = document.getElementById('accessList');
-  el.textContent = 'Loading…';
+  el.textContent = 'Loading...';
   try{
     const data = await adminFetch('/api/admin/access', {method: 'GET'});
     accessRows = data.access || [];
@@ -562,11 +580,11 @@ document.getElementById('accessFile').addEventListener('change', async function(
   if(!file) return;
   if(typeof XLSX === 'undefined'){ showMsg(msgEl, 'The file-parsing library didn\'t load — check your connection and reload this page.', 'err'); e.target.value=''; return; }
   try{
-    showMsg(msgEl, 'Reading file…', 'info');
+    showMsg(msgEl, 'Reading file...', 'info');
     const buf = await file.arrayBuffer();
     const workbook = XLSX.read(buf, {type: 'array'});
     const rows = parseAccessSheet(workbook);
-    showMsg(msgEl, 'Uploading ' + rows.length + ' grants…', 'info');
+    showMsg(msgEl, 'Uploading ' + rows.length + ' grants...', 'info');
     const result = await adminFetch('/api/admin/access/import', {
       method: 'POST',
       body: JSON.stringify({rows: rows, actorName: 'Admin'})
@@ -826,7 +844,7 @@ function parseWorkbook(workbook){
       if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
     }
     if(headerRow === null){
-      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" — check the header row is present and spelled recognizably.');
+      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" — check the header row is present and spelled correctly.');
     }
 
     const sheetDevices = [];
@@ -918,6 +936,105 @@ function parseWorkbook(workbook){
   return devices;
 }
 
+// Parses a raw "LCS Devices" Info Sheet — a completely different column
+// layout from the AV Device Info sheet (Device, IP Address, IP ID,
+// Local Cresnet Devices, Installed Location, DIN Rail, Model#,
+// Connection, Note; no Zone/Amp Channel/Status/Level/AV I/O at all,
+// since those are AV-specific concepts). Outputs the SAME device-object
+// shape parseWorkbook() does — id, name, location (normalized the same
+// way), ports (always empty; LC gear has no Port Map concept here) —
+// so the result can go through upsertDevices/handleCreateProject/
+// handleSyncDevices identically to an AV device list, just tagged
+// deviceType: 'lc' by the caller.
+function parseLcsWorkbook(workbook){
+  const sheetName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'lcs devices'; });
+  if(!sheetName){
+    throw new Error('No "LCS Devices" sheet found. Sheet names in this file: ' + workbook.SheetNames.join(', '));
+  }
+  const ws = workbook.Sheets[sheetName];
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+  let headerRow = null, cols = {};
+  for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 15); r++){
+    const found = {};
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({r, c})];
+      const h = normalizeHeader(cell ? cell.v : '');
+      if(h === 'device') found.device = c;
+      else if(h === 'ipaddress') found.ip = c;
+      else if(h === 'ipid') found.ipid = c;
+      else if(h === 'localcresnetdevices') found.cresnetDevices = c;
+      else if(h === 'installedlocation') found.location = c;
+      else if(h === 'dinrail') found.dinRail = c;
+      else if(h === 'model#' || h.indexOf('model') !== -1) found.model = c;
+      else if(h === 'connection') found.connection = c;
+      else if(h === 'note') found.note = c;
+    }
+    if(found.device !== undefined){ headerRow = r; cols = found; break; }
+  }
+  if(headerRow === null){
+    throw new Error('Couldn\'t find a "Device" column in the "LCS Devices" sheet — check the header row is present and spelled recognizably.');
+  }
+
+  const cellStr = function(r, c){
+    if(c === undefined) return '';
+    const cell = ws[XLSX.utils.encode_cell({r, c})];
+    return cell && cell.v != null ? String(cell.v).trim() : '';
+  };
+
+  const devices = [];
+  for(let r = headerRow + 1; r <= range.e.r; r++){
+    const name = cellStr(r, cols.device);
+    if(!name) continue;
+    devices.push({
+      name: name,
+      status: '', level: '', zone: '', channel: '', avio: '',
+      location: cellStr(r, cols.location),
+      model: cellStr(r, cols.model),
+      ip: cellStr(r, cols.ip),
+      ipid: cellStr(r, cols.ipid),
+      note: cellStr(r, cols.note),
+      dinRail: cellStr(r, cols.dinRail),
+      connection: cellStr(r, cols.connection),
+      cresnetDevices: cellStr(r, cols.cresnetDevices),
+      ports: []
+    });
+  }
+  if(!devices.length) throw new Error('No device rows found below the header in "LCS Devices".');
+
+  const seen = {};
+  devices.forEach(function(d){
+    const base = slugify(d.name) || 'device';
+    const n = seen[base] || 0;
+    seen[base] = n + 1;
+    d.id = n === 0 ? base : (base + '-' + (n + 1));
+  });
+  devices.forEach(function(d){ d.location = normalizeLocation(d.location); });
+
+  return devices;
+}
+
+// AV and LC files are distinguished purely by which sheet they contain
+// — "Device Info"/"Component Info"/"Device Report" for AV, "LCS
+// Devices" for LC — so the person never has to say which one they're
+// uploading; the file already says so. Both present in one file is
+// treated as a mistake rather than a guess, since silently picking one
+// side could mean the other type's devices go completely unnoticed.
+function detectDeviceType(workbook){
+  const normalize = function(n){ return n.replace(/\s+/g, '').toLowerCase(); };
+  const hasAv = workbook.SheetNames.some(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo' || normalize(n) === 'devicereport'; });
+  const hasLc = workbook.SheetNames.some(function(n){ return n.trim().toLowerCase() === 'lcs devices'; });
+  if(hasAv && hasLc){
+    throw new Error('This file has both a "Device Info"-style sheet and an "LCS Devices" sheet — upload one file per type so it\'s clear which set of devices this is.');
+  }
+  if(hasAv) return 'av';
+  if(hasLc) return 'lc';
+  throw new Error(
+    'Couldn\'t find a "Device Info" or "LCS Devices" sheet in this file. Sheet names found: ' +
+    (workbook.SheetNames.length ? workbook.SheetNames.join(', ') : '(none)')
+  );
+}
+
 // ---------- create project ----------
 document.getElementById('createBtn').addEventListener('click', async function(){
   const msgEl = document.getElementById('createMsg');
@@ -937,20 +1054,22 @@ document.getElementById('createBtn').addEventListener('click', async function(){
   btn.disabled = true;
 
   try{
-    showMsg(msgEl, 'Reading file…', 'info');
+    showMsg(msgEl, 'Reading file...', 'info');
     const buf = await file.arrayBuffer();
     const workbook = XLSX.read(buf, {type: 'array'});
 
-    showMsg(msgEl, 'Parsing devices…', 'info');
-    const devices = parseWorkbook(workbook);
+    showMsg(msgEl, 'Parsing devices...', 'info');
+    const deviceType = detectDeviceType(workbook);
+    const typeLabel = deviceType === 'lc' ? 'LC' : 'AV';
+    const devices = deviceType === 'lc' ? parseLcsWorkbook(workbook) : parseWorkbook(workbook);
 
-    showMsg(msgEl, 'Uploading ' + devices.length + ' devices…', 'info');
+    showMsg(msgEl, 'Uploading ' + devices.length + ' devices...', 'info');
     const result = await adminFetch('/api/admin/projects', {
       method: 'POST',
-      body: JSON.stringify({id: id, name: name, shortName: shortName, region: region, devices: devices})
+      body: JSON.stringify({id: id, name: name, shortName: shortName, region: region, devices: devices, deviceType: deviceType})
     });
 
-    showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' devices.', 'ok');
+    showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' ' + typeLabel + ' devices.', 'ok');
     document.getElementById('newName').value = '';
     document.getElementById('newShort').value = '';
     document.getElementById('newId').value = '';

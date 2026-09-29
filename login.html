@@ -17,7 +17,6 @@
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-
   gtag('config', 'G-43BWZKJ6FF');
 </script>
 <title>Login — Power Design Commissioning</title>
@@ -61,10 +60,26 @@ html,body{height:100%;}
   <div class="content admin-wrap" id="content">
     <div id="gate" class="admin-card">
       <h2>Account Login</h2>
-      <div class="field">
-        <input type="email" id="emailInput" placeholder="Enter email address" autocomplete="email">
+
+      <div id="modeChoice">
+        <div class="field-hint" style="margin-bottom:10px;">Choose which side you're logging into:</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn primary" id="chooseAvBtn" style="flex:1;">AV</button>
+          <button class="btn primary" id="chooseLcBtn" style="flex:1;">LC</button>
+        </div>
       </div>
-      <button class="btn primary" id="emailSubmit" style="width:100%;">Login</button>
+
+      <div id="emailStep" hidden>
+        <div class="field-hint" style="margin-bottom:10px;">
+          Logging into <b id="chosenModeLabel"></b> &middot;
+          <button type="button" id="changeModeBtn" style="background:none;border:none;color:var(--accent);text-decoration:underline;cursor:pointer;padding:0;font:inherit;">change</button>
+        </div>
+        <div class="field">
+          <input type="email" id="emailInput" placeholder="Enter email address" autocomplete="email">
+        </div>
+        <button class="btn primary" id="emailSubmit" style="width:100%;">Login</button>
+      </div>
+
       <div id="loginMsg"></div>
     </div>
   </div>
