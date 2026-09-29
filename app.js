@@ -190,7 +190,7 @@ function renderLocations(){
   if(q){
     locs = LOCATIONS.filter(function(loc){
       if(matchesSearch(loc.name)) return true;
-      return loc.devices.some(function(d){ return matchesSearch(d.name) || matchesSearch(d.model); });
+      return loc.devices.some(function(d){ return matchesSearch(d.name) || matchesSearch(d.model) || matchesSearch(d.cresnetId || '') || matchesSearch(d.controller || ''); });
     });
   }
   html += '<div class="section-label">' + locs.length + ' location' + (locs.length===1?'':'s') + '</div>';
@@ -251,7 +251,7 @@ function renderLocationDetail(){
   const st = locationStats(loc.devices);
   let devices = loc.devices;
   if(searchQuery.trim()){
-    devices = devices.filter(function(d){ return matchesSearch(d.name) || matchesSearch(d.model); });
+    devices = devices.filter(function(d){ return matchesSearch(d.name) || matchesSearch(d.model) || matchesSearch(d.cresnetId || '') || matchesSearch(d.controller || ''); });
   }
   let html = '';
   html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
@@ -327,14 +327,15 @@ function deviceDraftField(id, label, placeholder, maxlength){
 
 function addDeviceFormHtml(){
   let html = '<div class="punch-form" style="margin-top:10px;">';
-  html += deviceDraftField('name', 'Device Name (Required)', DEVICE_TYPE === 'lc' ? 'e.g. Lighting Processor 1' : 'e.g. R1-TV1-01');
+  html += deviceDraftField('name', DEVICE_TYPE === 'lc' ? 'Cresnet Device Name (Required)' : 'Device Name (Required)', DEVICE_TYPE === 'lc' ? 'e.g. ZC-1-3A' : 'e.g. R1-TV1-01');
   html += deviceDraftField('model', DEVICE_TYPE === 'lc' ? 'Model #' : 'Manufacturer | Model', DEVICE_TYPE === 'lc' ? 'e.g. CLW-DIMEX-P' : 'e.g. Sony | XR-65X90L');
-  html += deviceDraftField('ip', 'IP Address', 'e.g. 10.0.1.20');
-  html += deviceDraftField('ipid', 'IP ID');
+  html += deviceDraftField('ip', DEVICE_TYPE === 'lc' ? 'Controller IP Address' : 'IP Address', 'e.g. 10.0.1.20');
+  html += deviceDraftField('ipid', DEVICE_TYPE === 'lc' ? 'Controller IP ID' : 'IP ID');
   if(DEVICE_TYPE === 'lc'){
-    html += deviceDraftField('dinRail', 'DIN Rail', 'e.g. Panel B, Slot 4');
+    html += deviceDraftField('cresnetId', 'Cresnet ID', 'e.g. 03');
+    html += deviceDraftField('controller', 'Controller', 'e.g. LCP-DPC1');
+    html += deviceDraftField('dinRail', 'DIN Rail', 'e.g. Rail 1');
     html += deviceDraftField('connection', 'Connection', 'e.g. Cresnet');
-    html += deviceDraftField('cresnetDevices', 'Local Cresnet Devices');
   } else {
     html += deviceDraftField('zone', 'Zone');
   }
@@ -402,13 +403,15 @@ function deviceCardHtml(d, showLocation){
     + (showLocation ? ' &middot; ' + esc(d.location) : '') + '</div>'
     + '</div></div>';
   html += '<div class="device-data mono">';
-  if(d.ip) html += '<span>IP <b>' + esc(d.ip) + '</b></span>';
-  if(d.ipid) html += '<span>ID <b>' + esc(d.ipid) + '</b></span>';
+  if(d.cresnetId) html += '<span>Cresnet ID <b>' + esc(d.cresnetId) + '</b></span>';
+  if(d.controller) html += '<span>Ctrl <b>' + esc(d.controller) + '</b></span>';
+  // On an LC device the IP / IP ID belong to its controller, not to the device itself
+  if(d.ip) html += '<span>' + (d.controller ? 'Ctrl IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
+  if(d.ipid) html += '<span>' + (d.controller ? 'Ctrl ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
-  if(d.dinRail) html += '<span>Rail <b>' + esc(d.dinRail) + '</b></span>';
+  if(d.dinRail) html += '<span>DIN <b>' + esc(d.dinRail) + '</b></span>';
   if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
-  if(d.cresnetDevices) html += '<span>Cresnet <b>' + esc(d.cresnetDevices) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
@@ -553,14 +556,28 @@ function syncConfigured(){
 }
 
 async function apiCall(path, options){
-  const res = await fetch(SYNC_API_BASE.replace(/\/$/, '') + path, Object.assign({
-    headers: {'Content-Type': 'application/json'}
-  }, options));
-  if(!res.ok){
-    const text = await res.text().catch(function(){ return ''; });
-    throw new Error('API ' + path + ' failed (' + res.status + '): ' + text);
+  const opts = options || {};
+  // Optional per-call timeout. Check writes go out one at a time per field
+  // (see queueCheckWrite), so a request that hangs on a bad connection has
+  // to eventually fail and be retried rather than hold that field up forever.
+  let timer = null, signal;
+  if(opts.timeoutMs && typeof AbortController !== 'undefined'){
+    const ctl = new AbortController();
+    timer = setTimeout(function(){ ctl.abort(); }, opts.timeoutMs);
+    signal = ctl.signal;
   }
-  return res.json();
+  try{
+    const res = await fetch(SYNC_API_BASE.replace(/\/$/, '') + path, Object.assign({
+      headers: {'Content-Type': 'application/json'}
+    }, opts, signal ? {signal: signal} : {}));
+    if(!res.ok){
+      const text = await res.text().catch(function(){ return ''; });
+      throw new Error('API ' + path + ' failed (' + res.status + '): ' + text);
+    }
+    return await res.json();
+  }finally{
+    if(timer) clearTimeout(timer);
+  }
 }
 
 async function fetchRemoteState(){
@@ -589,6 +606,7 @@ function loadDeviceCache(){
 
 async function pushCheck(deviceId, key, value){
   return apiCall('/api/check', {
+    timeoutMs: 12000,
     method: 'POST',
     body: JSON.stringify({
       project: currentProject, deviceId: deviceId, key: key, value: value,
@@ -668,18 +686,117 @@ function activePunchTextareaId(){
   return 'punchDesc';
 }
 
+// ---------- check taps vs. the poll ----------
+// A tap on Power / Network / Function shows on screen immediately and is
+// sent to the server afterwards. The poll below replaces local state with
+// the server's — so a poll that was already in flight when you tapped (its
+// answer describes the server from BEFORE your tap landed) used to snap the
+// pill back a step, and the next tap then started from the wrong place.
+// Every tapped field is therefore tracked here until the server has provably
+// caught up, and the poll leaves it alone until then:
+//   - one write in flight per field; rapid taps coalesce into the latest
+//     value, so writes can't land out of order and strand the server on a
+//     stale value
+//   - the field stays protected while its write is in flight, while it is
+//     failing and being retried (offline), and against any poll that STARTED
+//     before the write was confirmed (that poll's answer predates it)
+//   - only a poll that began after the write was confirmed may overwrite it,
+//     which also ends the protection — so other people's later changes to
+//     the same field still come through
+// Other fields and other devices are never held back: they take the
+// server's values on every poll as before.
+const localCheckEdits = {};   // 'deviceId|field' -> {deviceId, key, value, status, sentValue, settledAt}
+let checkClock = 0;           // ticks whenever a write is confirmed or a poll starts
+
+function queueCheckWrite(deviceId, key, value){
+  const k = deviceId + '|' + key;
+  let e = localCheckEdits[k];
+  if(!e){
+    e = localCheckEdits[k] = {deviceId: deviceId, key: key, value: value, status: 'idle', sentValue: undefined, settledAt: null};
+  }else{
+    e.value = value;
+    e.settledAt = null;
+    if(e.status === 'settled') e.status = 'idle';
+  }
+  sendCheckEdit(e);
+}
+
+function sendCheckEdit(e){
+  if(e.status === 'sending') return;    // its completion below re-checks for a newer value
+  e.status = 'sending';
+  const sent = e.value;
+  e.sentValue = sent;
+  pushCheck(e.deviceId, e.key, sent).then(function(){
+    e.settledAt = ++checkClock;
+    if(e.value !== sent){               // tapped again meanwhile — send the latest
+      e.status = 'idle';
+      sendCheckEdit(e);
+    }else{
+      e.status = 'settled';
+    }
+  }).catch(function(err){
+    console.error(err);
+    e.status = 'failed';                // stays protected; retried on the next poll
+  });
+}
+
+function flushPendingChecks(){
+  Object.keys(localCheckEdits).forEach(function(k){
+    const e = localCheckEdits[k];
+    if(e.status === 'failed' || e.status === 'idle') sendCheckEdit(e);
+  });
+}
+
+// The server's checklist, with this person's still-protected taps laid over it.
+function mergeRemoteChecklist(remoteChecklist, pollStartedAt){
+  const merged = {};
+  Object.keys(remoteChecklist).forEach(function(id){ merged[id] = Object.assign({}, remoteChecklist[id]); });
+  Object.keys(localCheckEdits).forEach(function(k){
+    const e = localCheckEdits[k];
+    if(e.status === 'settled' && e.settledAt < pollStartedAt){
+      delete localCheckEdits[k];        // this poll began after the write landed: the server has caught up
+      return;
+    }
+    if(!merged[e.deviceId]) merged[e.deviceId] = {power: null, network: null, function: null};
+    merged[e.deviceId][e.key] = e.value;
+  });
+  return merged;
+}
+
+// What's visible on screen, boiled down — used to tell whether a poll
+// actually changed anything worth redrawing.
+function stateSignature(cl, pu){
+  const c = Object.keys(cl).sort().map(function(id){
+    const v = cl[id] || {};
+    return id + ':' + (v.power || '') + '/' + (v.network || '') + '/' + (v.function || '');
+  }).join(',');
+  const p = pu.map(function(x){
+    return [x.id, x.status, x.severity, x.ownership, x.description, x.location, x.deviceName, x.resolvedBy, x.reportedBy].join('~');
+  }).join('|');
+  return c + '#' + p;
+}
+
 async function syncFromRemote(){
   if(!syncConfigured()) return;
+  flushPendingChecks();
+  const pollStartedAt = ++checkClock;
   try{
     const remote = await fetchRemoteState();
-    checklist = remote.checklist || {};
+    const wasEnabled = syncEnabled;
+    const before = stateSignature(checklist, punches);
+    checklist = mergeRemoteChecklist(remote.checklist || {}, pollStartedAt);
     const remoteIds = {};
     (remote.punches || []).forEach(function(p){ remoteIds[p.id] = true; });
     const stillLocal = punches.filter(function(p){ return String(p.id).indexOf('local-') === 0 && !remoteIds[p.id]; });
     punches = (remote.punches || []).concat(stillLocal);
     syncEnabled = true;
     saveCache();
-    if(isComposingPunch()){
+    // Only rebuild the screen when something visible actually changed (or the
+    // connection just came back, which clears the offline banner). Rebuilding
+    // on every poll is what made the page flicker — and swapping buttons out
+    // from under a finger mid-tap can swallow that tap.
+    const changed = !wasEnabled || before !== stateSignature(checklist, punches);
+    if(!changed || isComposingPunch()){
       renderStats();
     }else{
       renderContent();
@@ -719,7 +836,7 @@ async function submitAddDevice(){
     name: getVal('name'), model: getVal('model'), ip: getVal('ip'), ipid: getVal('ipid'),
     zone: getVal('zone'), channel: getVal('channel'), status: getVal('status'), level: getVal('level'),
     avio: getVal('avio'), note: getVal('note'),
-    dinRail: getVal('dinRail'), connection: getVal('connection'), cresnetDevices: getVal('cresnetDevices')
+    dinRail: getVal('dinRail'), connection: getVal('connection'), cresnetId: getVal('cresnetId'), controller: getVal('controller')
   };
   if(!fields.name){ alert('Device name is required.'); return; }
   const btn = document.getElementById('submitAddDevice');
@@ -729,7 +846,7 @@ async function submitAddDevice(){
     DEVICES.push({
       id: result.id, name: fields.name, status: fields.status, level: fields.level, location: location,
       zone: fields.zone, channel: fields.channel, model: fields.model, ip: fields.ip, ipid: fields.ipid,
-      avio: fields.avio, note: fields.note, dinRail: fields.dinRail, connection: fields.connection, cresnetDevices: fields.cresnetDevices, ports: []
+      avio: fields.avio, note: fields.note, dinRail: fields.dinRail, connection: fields.connection, cresnetId: fields.cresnetId, controller: fields.controller, ports: []
     });
     addingDeviceFor = null;
     deviceDraft = {};
@@ -772,7 +889,7 @@ function toggleCheck(deviceId, key){
   persistChecklist(deviceId);
   renderContent();
   if(syncConfigured()){
-    pushCheck(deviceId, key, next[key]).catch(function(e){ console.error(e); /* will reconcile on next poll */ });
+    queueCheckWrite(deviceId, key, next[key]);
   }
 }
 function submitPunch(deviceId){
@@ -867,7 +984,7 @@ async function exportCsv(){
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = currentProject + '-punch-list' + (DEVICE_TYPE === 'lc' ? '-LC' : '') + '.csv';
+    a.download = 'rcrsb-punch-list' + (DEVICE_TYPE === 'lc' ? '-lc' : '') + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -969,7 +1086,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:' + (DEVICE_TYPE === 'lc' ? 'U' : 'R') + '1');
+    ws.mergeCells('A1:' + (DEVICE_TYPE === 'lc' ? 'V' : 'R') + '1');
     const title = ws.getCell('A1');
     title.value = projectDisplayName + ' — ' + (DEVICE_TYPE === 'lc' ? 'LC ' : '') + 'Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -979,7 +1096,7 @@ async function exportDeviceReport(){
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
     const deviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
-    if(DEVICE_TYPE === 'lc') deviceHeaders.push('DIN Rail','Connection','Local Cresnet Devices');
+    if(DEVICE_TYPE === 'lc') deviceHeaders.push('Cresnet ID','Controller','DIN Rail','Connection');
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
@@ -1030,7 +1147,7 @@ async function exportDeviceReport(){
       noteAtCell.value = formatEasternTime(d.noteUpdatedAt);
       noteAtCell.fill = xlFill(band);
       if(DEVICE_TYPE === 'lc'){
-        [d.dinRail, d.connection, d.cresnetDevices].forEach(function(v, i){
+        [d.cresnetId, d.controller, d.dinRail, d.connection].forEach(function(v, i){
           const cell = row.getCell(19 + i);
           cell.value = v || '';
           cell.fill = xlFill(band);
@@ -1040,7 +1157,7 @@ async function exportDeviceReport(){
     });
 
     const devWidths = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
-    if(DEVICE_TYPE === 'lc') devWidths.push({width:22},{width:16},{width:26});
+    if(DEVICE_TYPE === 'lc') devWidths.push({width:12},{width:28},{width:14},{width:16});
     ws.columns = devWidths;
     ws.views = [{state:'frozen', ySplit:3}];
 
@@ -1412,7 +1529,7 @@ async function boot(){
   document.getElementById('projTitle').textContent = DEVICE_TYPE_LABEL + ' Commissioning';
   document.getElementById('projSub').textContent =
     (currentProjectMeta.shortName || currentProjectMeta.name) + ' · ' + currentProjectMeta.name;
-  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' Systems Commissioning';
+  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) +' Systems Commissioning';
 
   loadCache();
   renderContent();

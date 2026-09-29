@@ -844,7 +844,7 @@ function parseWorkbook(workbook){
       if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
     }
     if(headerRow === null){
-      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" — check the header row is present and spelled correctly.');
+      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" — check the header row is present and spelled recognizably.');
     }
 
     const sheetDevices = [];
@@ -936,16 +936,29 @@ function parseWorkbook(workbook){
   return devices;
 }
 
-// Parses a raw "LCS Devices" Info Sheet — a completely different column
-// layout from the AV Device Info sheet (Device, IP Address, IP ID,
-// Local Cresnet Devices, Installed Location, DIN Rail, Model#,
-// Connection, Note; no Zone/Amp Channel/Status/Level/AV I/O at all,
-// since those are AV-specific concepts). Outputs the SAME device-object
-// shape parseWorkbook() does — id, name, location (normalized the same
-// way), ports (always empty; LC gear has no Port Map concept here) —
-// so the result can go through upsertDevices/handleCreateProject/
-// handleSyncDevices identically to an AV device list, just tagged
-// deviceType: 'lc' by the caller.
+// Parses a raw "LCS Devices" Info Sheet. That sheet is hierarchical: a
+// "Device" (a controller / panel — the one carrying the IP Address and
+// IP ID) followed by the Local Cresnet Devices wired to it, one per row,
+// each with its own Cresnet ID, Installed Location, DIN Rail, Model #
+// and Connection. The Cresnet devices are what actually get
+// commissioned, so THEY are the records: the "Local Cresnet Devices"
+// name is the identity (the "primary key"); the Device column is only a
+// group heading, blank on every row but the first of its group.
+//
+// What each record carries:
+//   name        <- Local Cresnet Devices
+//   cresnetId   <- Cresnet ID, as displayed ("03" stays "03", "0A" stays "0A")
+//   location    <- the row's own Installed Location (usually the panel the
+//                  module sits in); falls back to the controller's name
+//   controller  <- the Device it belongs to, plus where that controller
+//                  lives when its own row says so ("LCP-DPC1 @ BOH Corridor 129")
+//   ip / ipid   <- the controller's IP Address / IP ID. The sheet lists them
+//                  once per group, so every child inherits them — even a
+//                  child that sits above the row they happen to be typed on
+//   dinRail, connection, model, note <- straight from the row
+// A Cresnet device name that appears in more than one group gets its
+// controller appended to the id — for every occurrence, not by row
+// order — so ids stay stable when the sheet is re-uploaded.
 function parseLcsWorkbook(workbook){
   const sheetName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'lcs devices'; });
   if(!sheetName){
@@ -954,62 +967,121 @@ function parseLcsWorkbook(workbook){
   const ws = workbook.Sheets[sheetName];
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
 
+  // Displayed text (cell.w) rather than the raw value, so an ID that is
+  // really the number 7 formatted as "07" comes through as it looks in Excel.
+  const cellText = function(r, c){
+    if(c === undefined) return '';
+    const cell = ws[XLSX.utils.encode_cell({r, c})];
+    if(!cell) return '';
+    if(cell.w != null && String(cell.w).trim() !== '') return String(cell.w).trim();
+    return cell.v != null ? String(cell.v).trim() : '';
+  };
+
   let headerRow = null, cols = {};
   for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 15); r++){
     const found = {};
     for(let c = range.s.c; c <= range.e.c; c++){
-      const cell = ws[XLSX.utils.encode_cell({r, c})];
-      const h = normalizeHeader(cell ? cell.v : '');
+      const h = normalizeHeader(cellText(r, c));
+      if(!h) continue;
       if(h === 'device') found.device = c;
+      else if(h === 'localcresnetdevices') found.child = c;
+      else if(h === 'cresnetid') found.cresnetId = c;
       else if(h === 'ipaddress') found.ip = c;
       else if(h === 'ipid') found.ipid = c;
-      else if(h === 'cresnetid') found.cresnetid = c;
-      else if(h === 'localcresnetdevices') found.cresnetDevices = c;
       else if(h === 'installedlocation') found.location = c;
       else if(h === 'dinrail') found.dinRail = c;
-      else if(h === 'model#' || h.indexOf('model') !== -1) found.model = c;
       else if(h === 'connection') found.connection = c;
-      else if(h === 'note') found.note = c;
+      else if(h === 'note' || h === 'notes') found.note = c;
+      else if(h.indexOf('model') !== -1) found.model = c;
     }
-    if(found.device !== undefined){ headerRow = r; cols = found; break; }
+    if(found.child !== undefined){ headerRow = r; cols = found; break; }
   }
   if(headerRow === null){
-    throw new Error('Couldn\'t find a "Device" column in the "LCS Devices" sheet — check the header row is present and spelled recognizably.');
+    throw new Error('Couldn\'t find a "Local Cresnet Devices" column in the "LCS Devices" sheet — check the header row is present and spelled recognizably.');
   }
 
-  const cellStr = function(r, c){
-    if(c === undefined) return '';
-    const cell = ws[XLSX.utils.encode_cell({r, c})];
-    return cell && cell.v != null ? String(cell.v).trim() : '';
+  // The sheet's last column (values like "Z-MT2-13") can come with no
+  // header at all. With no Note column, and an unlabeled column right
+  // after the last recognized one that actually holds data, take it as
+  // the note rather than silently dropping it.
+  if(cols.note === undefined){
+    const lastRecognized = Math.max.apply(null, Object.keys(cols).map(function(k){ return cols[k]; }));
+    const candidate = lastRecognized + 1;
+    if(candidate <= range.e.c && !normalizeHeader(cellText(headerRow, candidate))){
+      for(let r = headerRow + 1; r <= range.e.r; r++){
+        if(cellText(r, candidate)){ cols.note = candidate; break; }
+      }
+    }
+  }
+
+  // Walk the rows once, grouping children under their controller. A
+  // controller name starts (or re-enters) a group; IP / IP ID are taken
+  // from whichever row of the group carries them first.
+  const groups = [], groupByName = {};
+  let group = null;
+  const enterGroup = function(name){
+    if(!groupByName[name]){
+      groupByName[name] = {name: name, room: '', ip: '', ipid: '', children: []};
+      groups.push(groupByName[name]);
+    }
+    group = groupByName[name];
   };
 
-  const devices = [];
   for(let r = headerRow + 1; r <= range.e.r; r++){
-    const name = cellStr(r, cols.device);
-    if(!name) continue;
-    devices.push({
-      name: name,
-      status: '', level: '', zone: '', channel: '', avio: '',
-      location: cellStr(r, cols.location),
-      model: cellStr(r, cols.model),
-      ip: cellStr(r, cols.ip),
-      ipid: cellStr(r, cols.ipid),
-      cresnetid: cellStr(r, cols.cresnetid),
-      note: cellStr(r, cols.note),
-      dinRail: cellStr(r, cols.dinRail),
-      connection: cellStr(r, cols.connection),
-      cresnetDevices: cellStr(r, cols.cresnetDevices),
-      ports: []
-    });
+    const dev = cellText(r, cols.device);
+    const child = cellText(r, cols.child);
+    const ip = cellText(r, cols.ip);
+    const ipid = cellText(r, cols.ipid);
+    const loc = cellText(r, cols.location);
+    if(!dev && !child && !ip && !ipid && !loc) continue;                      // blank row
+    if(normalizeHeader(child) === 'localcresnetdevices' || normalizeHeader(dev) === 'device') continue; // a repeated header row
+    if(dev || !group) enterGroup(dev);
+    if(ip && !group.ip) group.ip = ip;
+    if(ipid && !group.ipid) group.ipid = ipid;
+    if(child){
+      group.children.push({
+        name: child,
+        cresnetId: cellText(r, cols.cresnetId),
+        location: loc,
+        model: cellText(r, cols.model),
+        dinRail: cellText(r, cols.dinRail),
+        connection: cellText(r, cols.connection),
+        note: cellText(r, cols.note)
+      });
+    } else if(dev && loc){
+      group.room = loc;   // the controller's own row: Installed Location is where the controller lives
+    }
   }
-  if(!devices.length) throw new Error('No device rows found below the header in "LCS Devices".');
 
+  const devices = [];
+  groups.forEach(function(g){
+    const controller = g.name ? (g.room ? g.name + ' @ ' + g.room : g.name) : '';
+    g.children.forEach(function(ch){
+      devices.push({
+        name: ch.name,
+        status: '', level: '', zone: '', channel: '', avio: '',
+        location: ch.location || g.name || '',
+        model: ch.model, ip: g.ip, ipid: g.ipid, note: ch.note,
+        cresnetId: ch.cresnetId, controller: controller,
+        dinRail: ch.dinRail, connection: ch.connection,
+        ports: [], _group: g.name
+      });
+    });
+  });
+  if(!devices.length){
+    throw new Error('No Cresnet devices found in "LCS Devices" — each device needs a name in the "Local Cresnet Devices" column.');
+  }
+
+  const nameCounts = {};
+  devices.forEach(function(d){ const s = slugify(d.name) || 'device'; nameCounts[s] = (nameCounts[s] || 0) + 1; });
   const seen = {};
   devices.forEach(function(d){
     const base = slugify(d.name) || 'device';
-    const n = seen[base] || 0;
-    seen[base] = n + 1;
-    d.id = n === 0 ? base : (base + '-' + (n + 1));
+    const id = nameCounts[base] > 1 ? base + '-' + (slugify(d._group) || 'x') : base;
+    const n = seen[id] || 0;
+    seen[id] = n + 1;
+    d.id = n === 0 ? id : id + '-' + (n + 1);
+    delete d._group;
   });
   devices.forEach(function(d){ d.location = normalizeLocation(d.location); });
 
