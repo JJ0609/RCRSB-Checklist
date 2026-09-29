@@ -867,7 +867,7 @@ async function exportCsv(){
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = currentProject + '-punch-list' + (DEVICE_TYPE === 'lc' ? '-lc' : '') + '.csv';
+    a.download = currentProject + '-punch-list' + (DEVICE_TYPE === 'lc' ? '-LC' : '') + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
