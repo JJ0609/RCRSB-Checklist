@@ -963,6 +963,7 @@ function parseLcsWorkbook(workbook){
       if(h === 'device') found.device = c;
       else if(h === 'ipaddress') found.ip = c;
       else if(h === 'ipid') found.ipid = c;
+      else if(h === 'cresnetid') found.cresnetid = c;
       else if(h === 'localcresnetdevices') found.cresnetDevices = c;
       else if(h === 'installedlocation') found.location = c;
       else if(h === 'dinrail') found.dinRail = c;
@@ -993,6 +994,7 @@ function parseLcsWorkbook(workbook){
       model: cellStr(r, cols.model),
       ip: cellStr(r, cols.ip),
       ipid: cellStr(r, cols.ipid),
+      cresnetid: cellStr(r, cols.cresnetid),
       note: cellStr(r, cols.note),
       dinRail: cellStr(r, cols.dinRail),
       connection: cellStr(r, cols.connection),
