@@ -116,7 +116,7 @@ async function loadProjectList(){
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-sync-file="' + esc(p.id) + '" style="display:none;">'
-        + '<div style="justify-content: center;">'
+        + '<div style="flex-wrap:wrap">'
         + '<button class="btn" data-update="' + esc(p.id) + '" title="Detects AV or LC automatically from the sheet the file contains">Update Devices</button>'
         + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
         + '<button class="btn" data-sync="' + esc(p.id) + '" style="border-color:var(--open);color:var(--open);" title="Detects AV or LC automatically. Adds/updates devices AND removes any device or location missing from the file">Sync Devices (removes missing)</button>'
