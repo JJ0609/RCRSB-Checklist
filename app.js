@@ -40,6 +40,10 @@ const DEVICE_TYPE_LABEL = DEVICE_TYPE === 'lc' ? 'LC' : 'AV';
 
 let currentProject = null;   // set from the ?project= URL param at boot
 let currentProjectMeta = { name: '', shortName: '' };
+// Which sides of this project this person may open, as reported by the Worker
+// with the device list. Assumed open until told otherwise (older Worker,
+// offline cache) so nothing disappears by accident.
+let currentAccess = {av: true, lc: true};
 let DEVICES = [];
 let LOCATIONS = [];
 let SERVER_LOCATIONS = [];
@@ -404,14 +408,14 @@ function deviceCardHtml(d, showLocation){
     + '</div></div>';
   html += '<div class="device-data mono">';
   if(d.cresnetId) html += '<span>Cresnet ID <b>' + esc(d.cresnetId) + '</b></span>';
-  if(d.controller) html += '<span>Panel <b>' + esc(d.controller) + '</b></span>';
+  if(d.controller) html += '<span>Ctrl <b>' + esc(d.controller) + '</b></span>';
   // On an LC device the IP / IP ID belong to its controller, not to the device itself
-  if(d.ip) html += '<span>' + (d.controller ? 'Panel IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
-  if(d.ipid) html += '<span>' + (d.controller ? 'Panel ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
+  if(d.ip) html += '<span>' + (d.controller ? 'Ctrl IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
+  if(d.ipid) html += '<span>' + (d.controller ? 'Ctrl ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(d.dinRail) html += '<span>DIN <b>' + esc(d.dinRail) + '</b></span>';
-  if(d.connection) html += '<span>Connection <b>' + esc(d.connection) + '</b></span>';
+  if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
@@ -584,8 +588,12 @@ async function fetchRemoteState(){
   return apiCall('/api/state?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE, {method: 'GET'});
 }
 
+function callerEmail(){
+  try{ return sessionStorage.getItem('pd_user_email') || ''; }catch(e){ return ''; }
+}
+
 async function fetchDevicesAndMeta(){
-  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE, {method: 'GET'});
+  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE + '&email=' + encodeURIComponent(callerEmail()), {method: 'GET'});
 }
 
 function deviceCacheKey(){
@@ -1502,6 +1510,8 @@ async function boot(){
     DEVICES = data.devices || [];
     SERVER_LOCATIONS = data.locations || [];
     currentProjectMeta = data.project || {name: projectId, shortName: projectId};
+    currentAccess = data.access || currentAccess;
+    updateSwitchAvailability();
     saveDeviceCache(currentProjectMeta, DEVICES, SERVER_LOCATIONS);
     syncEnabled = true;
     loaded = true;
@@ -1529,7 +1539,7 @@ async function boot(){
   document.getElementById('projTitle').textContent = DEVICE_TYPE_LABEL + ' Commissioning';
   document.getElementById('projSub').textContent =
     (currentProjectMeta.shortName || currentProjectMeta.name) + ' · ' + currentProjectMeta.name;
-  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) +' Systems Commissioning';
+  document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' ' + DEVICE_TYPE_LABEL + ' Commissioning';
 
   loadCache();
   renderContent();
@@ -1548,6 +1558,14 @@ async function boot(){
 // existing beforeunload warning, same as any other way of leaving this
 // page. Log out clears everything, including a cached admin password
 // that would otherwise linger on a shared computer.
+// "Switch to LC/AV" only shows when this person was granted the other side of
+// this project — otherwise it would just open a side they weren't given.
+function updateSwitchAvailability(){
+  const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
+  const link = document.getElementById('switchSideLink');
+  if(link) link.hidden = currentAccess[other] === false;
+}
+
 (function setupSessionControls(){
   const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
   const switchLink = document.getElementById('switchSideLink');

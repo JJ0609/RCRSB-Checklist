@@ -390,6 +390,28 @@ let accessRows = [];             // raw grants from the server, cached client-si
 let accessGroupBy = 'project';   // 'project' | 'email' — resets to project on page load
 let expandedAccessGroup = null;  // key of the one open accordion card, or null
 
+// Each side of a project is open to everyone until someone is granted it;
+// after that only the people granted it see it. So the first grant on a
+// side RESTRICTS it, and revoking the last grant OPENS it up again — the
+// two helpers below are what the confirmations warn about.
+function sideHasGrants(projectId, side){
+  return accessRows.some(function(r){ return r.projectId === projectId && (r.sides === side || r.sides === 'both'); });
+}
+function sidesOfGrant(projectId, email){
+  const r = accessRows.find(function(x){ return x.projectId === projectId && x.email === email; });
+  return !r ? [] : (r.sides === 'av' ? ['av'] : r.sides === 'lc' ? ['lc'] : ['av', 'lc']);
+}
+// Of the sides being revoked from this person, the ones nobody ELSE covers —
+// i.e. that would become visible to everyone.
+function sidesThatWouldOpen(projectId, email, revokedSides){
+  return revokedSides.filter(function(side){
+    return !accessRows.some(function(r){
+      return r.projectId === projectId && r.email !== email && (r.sides === side || r.sides === 'both');
+    });
+  });
+}
+function sideList(sides){ return sides.map(function(s){ return s.toUpperCase(); }).join(' and '); }
+
 async function loadAccessList(){
   const el = document.getElementById('accessList');
   el.textContent = 'Loading...';
@@ -438,11 +460,32 @@ function renderAccessList(){
       + (isOpen ? '<div style="padding:2px 14px 8px;border-top:1px solid var(--border);">' + rowsHtml + '</div>' : '')
       + '</div>';
   }
-  function grantRow(primaryText, secondaryText, projectId, email){
+  // Per person, one button per side: "Revoke AV" when they have it, "Add AV"
+  // when they don't (same for LC), plus "Revoke all" when they have both.
+  // Revoking a person's only side removes the grant.
+  function sideButtons(projectId, email, sides){
+    const has = {av: sides === 'av' || sides === 'both', lc: sides === 'lc' || sides === 'both'};
+    const ids = 'data-project="' + esc(projectId) + '" data-email="' + esc(email) + '"';
+    const small = 'padding:5px 11px;font-size:12px;';
+    const red = 'border-color:var(--fail);color:var(--fail);';
+    const one = function(side){
+      const L = side.toUpperCase();
+      return has[side]
+        ? '<button class="btn" data-revoke-side="' + side + '" ' + ids + ' style="' + red + small + '">Revoke ' + L + '</button>'
+        : '<button class="btn" data-add-side="' + side + '" ' + ids + ' style="' + small + '">Add ' + L + '</button>';
+    };
+    const all = (has.av && has.lc)
+      ? '<button class="btn" data-revoke-project="' + esc(projectId) + '" data-revoke-email="' + esc(email) + '" style="' + red + small + '">Revoke all</button>'
+      : '';
+    return one('av') + one('lc') + all;
+  }
+  function grantRow(primaryText, secondaryText, projectId, email, sides){
     return '<div class="admin-row" style="padding:7px 0;">'
       + '<div><div class="name" style="font-size:13px;">' + esc(primaryText) + '</div>'
       + '<div class="meta">' + esc(secondaryText) + '</div></div>'
-      + '<button class="btn" data-revoke-project="' + esc(projectId) + '" data-revoke-email="' + esc(email) + '" style="border-color:var(--fail);color:var(--fail);padding:5px 11px;font-size:12px;">Revoke</button>'
+      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">'
+      + sideButtons(projectId, email, sides)
+      + '</div>'
       + '</div>';
   }
 
@@ -455,8 +498,12 @@ function renderAccessList(){
     Object.keys(groups).sort(function(a,b){ return groups[a].name.localeCompare(groups[b].name); }).forEach(function(pid){
       const g = groups[pid];
       const rows = g.rows.slice().sort(function(a,b){ return a.email.localeCompare(b.email); });
-      const rowsHtml = rows.map(function(r){ return grantRow(r.email, 'added by ' + (r.addedBy || ''), r.projectId, r.email); }).join('');
-      html += groupCard(pid, g.name, pid, rows.length, 'person', 'people', rowsHtml);
+      const rowsHtml = rows.map(function(r){ return grantRow(r.email, 'added by ' + (r.addedBy || ''), r.projectId, r.email, r.sides); }).join('');
+      const covered = function(side){
+        const n = rows.filter(function(r){ return r.sides === side || r.sides === 'both'; }).length;
+        return side.toUpperCase() + ': ' + (n ? n + (n === 1 ? ' person' : ' people') : 'open to everyone');
+      };
+      html += groupCard(pid, g.name, pid + ' - ' + covered('av') + ' - ' + covered('lc'), rows.length, 'person', 'people', rowsHtml);
     });
   } else {
     const groups = {};
@@ -466,7 +513,7 @@ function renderAccessList(){
     });
     Object.keys(groups).sort().forEach(function(email){
       const rows = groups[email].slice().sort(function(a,b){ return a.projectName.localeCompare(b.projectName); });
-      const rowsHtml = rows.map(function(r){ return grantRow(r.projectName, r.projectId + ' &middot; added by ' + (r.addedBy || ''), r.projectId, r.email); }).join('');
+      const rowsHtml = rows.map(function(r){ return grantRow(r.projectName, r.projectId + ' - added by ' + (r.addedBy || ''), r.projectId, r.email, r.sides); }).join('');
       html += groupCard(email, email, '', rows.length, 'project', 'projects', rowsHtml);
     });
   }
@@ -480,6 +527,9 @@ document.getElementById('grantBtn').addEventListener('click', async function(){
   const projectId = projectSel.value;
   const msgEl = document.getElementById('accessMsg');
   const actorName = sessionStorage.getItem('pd_user_email') || 'Admin';
+  const sides = (document.getElementById('grantSides') || {}).value || 'both';
+  const addLabel = sides === 'av' ? 'AV' : sides === 'lc' ? 'LC' : 'AV and LC';
+  const grantedSides = sides === 'both' ? ['av', 'lc'] : [sides];
   if(!email){ showMsg(msgEl, 'Enter an email or *@domain.com wildcard.', 'err'); return; }
   if(!projectId){ showMsg(msgEl, 'No project selected.', 'err'); return; }
   this.disabled = true;
@@ -487,15 +537,21 @@ document.getElementById('grantBtn').addEventListener('click', async function(){
     if(projectId === '__ALL_PROJECTS__'){
       const result = await adminFetch('/api/admin/access/grant-all', {
         method: 'POST',
-        body: JSON.stringify({email: email, actorName: actorName})
+        body: JSON.stringify({email: email, sides: sides, actorName: actorName})
       });
-      showMsg(msgEl, 'Granted access to all ' + result.granted + ' project' + (result.granted===1?'':'s') + '.', 'ok');
+      showMsg(msgEl, 'Added ' + addLabel + ' access on all ' + result.granted + ' project' + (result.granted===1?'':'s') + '.', 'ok');
     } else {
-      await adminFetch('/api/admin/access/grant', {
+      // Sides with no grants yet are open to everyone; this grant is what
+      // limits them to the people granted — say so.
+      const newlyLimited = grantedSides.filter(function(s){ return !sideHasGrants(projectId, s); });
+      const result = await adminFetch('/api/admin/access/grant', {
         method: 'POST',
-        body: JSON.stringify({projectId: projectId, email: email, actorName: actorName})
+        body: JSON.stringify({projectId: projectId, email: email, sides: sides, actorName: actorName})
       });
-      showMsg(msgEl, 'Granted.', 'ok');
+      const now = result && result.sides ? result.sides : sides;
+      const nowLabel = now === 'av' ? 'AV only' : now === 'lc' ? 'LC only' : 'both sides';
+      showMsg(msgEl, 'Saved - ' + email + ' can now see ' + nowLabel + '.' +
+        (newlyLimited.length ? ' ' + sideList(newlyLimited) + ' was open to everyone and is now limited to the people granted.' : ''), 'ok');
     }
     emailInput.value = '';
     loadAccessList();
@@ -523,14 +579,54 @@ document.getElementById('accessList').addEventListener('click', async function(e
     return;
   }
 
+  // Revoke or add ONE side of a person's access to a project.
+  const sideBtn = e.target.closest('[data-revoke-side], [data-add-side]');
+  if(sideBtn){
+    const projectId = sideBtn.getAttribute('data-project');
+    const email = sideBtn.getAttribute('data-email');
+    const revoking = sideBtn.hasAttribute('data-revoke-side');
+    const side = sideBtn.getAttribute(revoking ? 'data-revoke-side' : 'data-add-side');
+    const L = side.toUpperCase(), otherL = side === 'av' ? 'LC' : 'AV';
+    const pname = (accessRows.find(function(r){ return r.projectId === projectId; }) || {}).projectName || projectId;
+    const actorName = sessionStorage.getItem('pd_user_email') || 'Admin';
+    if(revoking){
+      let msg = 'Revoke ' + L + ' access for ' + email + ' on "' + pname + '"?' +
+        (sidesOfGrant(projectId, email).length > 1 ? ' They keep ' + otherL + '.' : ' That is their only side, so their grant is removed entirely.');
+      if(sidesThatWouldOpen(projectId, email, [side]).length){
+        msg += '\n\nNo one else has a grant for ' + L + ' on this project, so ' + L + ' will become visible to everyone.';
+      }
+      if(!confirm(msg)) return;
+    } else if(!sideHasGrants(projectId, side)){
+      if(!confirm(L + ' on "' + pname + '" is currently visible to everyone. Adding ' + email + ' limits ' + L + ' to the people who have a grant for it.\n\nContinue?')) return;
+    }
+    sideBtn.disabled = true;
+    try{
+      await adminFetch(revoking ? '/api/admin/access/revoke' : '/api/admin/access/grant', {
+        method: 'POST',
+        body: JSON.stringify({projectId: projectId, email: email, sides: side, actorName: actorName})
+      });
+      loadAccessList();
+      loadProjectList();
+    }catch(err){
+      alert('Could not ' + (revoking ? 'revoke' : 'add') + ': ' + err.message);
+      sideBtn.disabled = false;
+    }
+    return;
+  }
+
   const btn = e.target.closest('[data-revoke-project]');
   if(!btn) return;
   const projectId = btn.getAttribute('data-revoke-project');
   const email = btn.getAttribute('data-revoke-email');
-  if(!confirm('Revoke ' + email + '\'s access to "' + projectId + '"?')) return;
+  let msg = 'Revoke ' + email + '\'s access to "' + projectId + '"?';
+  const opening = sidesThatWouldOpen(projectId, email, sidesOfGrant(projectId, email));
+  if(opening.length){
+    msg += '\n\nNo one else has a grant for ' + sideList(opening) + ' on this project, so ' + sideList(opening) + ' will become visible to everyone.';
+  }
+  if(!confirm(msg)) return;
   btn.disabled = true;
   try{
-    await adminFetch('/api/admin/access/revoke', {method: 'POST', body: JSON.stringify({projectId: projectId, email: email})});
+    await adminFetch('/api/admin/access/revoke', {method: 'POST', body: JSON.stringify({projectId: projectId, email: email, actorName: sessionStorage.getItem('pd_user_email') || 'Admin'})});
     loadAccessList();
     loadProjectList();
   }catch(e){
@@ -538,6 +634,23 @@ document.getElementById('accessList').addEventListener('click', async function(e
     btn.disabled = false;
   }
 });
+
+// "AV only", "lc", "Both", "AV + LC" ... -> av / lc / both. Blank stays blank
+// (the server treats that as "both for someone new, leave an existing grant
+// alone"). Anything unrecognisable is passed through so the server can count
+// the row as skipped rather than guess.
+function normalizeSidesCell(v){
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  if(!s) return '';
+  const hasAv = /\bav\b/.test(s), hasLc = /\blc\b/.test(s);
+  if(hasAv && hasLc) return 'both';
+  if(s === 'both' || s === 'all') return 'both';
+  const rest = s.replace(/\bonly\b/g, '').replace(/\s+/g, '');
+  if(hasAv && rest === 'av') return 'av';
+  if(hasLc && rest === 'lc') return 'lc';
+  return s;
+}
+
 // Reads a CSV or xlsx with "email" and "project id" columns (matched by
 // header text, same approach as everywhere else in this file — tolerant
 // of column order, not of a missing/differently-worded header).
@@ -554,6 +667,7 @@ function parseAccessSheet(workbook){
       const h = normalizeHeader(cell ? cell.v : '');
       if(h === 'email' || h === 'emailaddress') found.email = c;
       else if(h === 'projectid' || h === 'project' || h === 'id') found.projectId = c;
+      else if(h === 'sides' || h === 'side') found.sides = c;
     }
     if(found.email !== undefined && found.projectId !== undefined){ headerRow = r; cols = found; break; }
   }
@@ -569,7 +683,7 @@ function parseAccessSheet(workbook){
     const email = cellStr(r, cols.email);
     const projectId = cellStr(r, cols.projectId);
     if(!email && !projectId) continue;
-    rows.push({email: email.toLowerCase(), projectId: projectId.toLowerCase()});
+    rows.push({email: email.toLowerCase(), projectId: projectId.toLowerCase(), sides: cols.sides !== undefined ? normalizeSidesCell(cellStr(r, cols.sides)) : ''});
   }
   if(!rows.length) throw new Error('No rows found below the header.');
   return rows;
@@ -592,7 +706,8 @@ document.getElementById('accessFile').addEventListener('change', async function(
     showMsg(msgEl,
       'Granted ' + result.granted + ' new access row' + (result.granted===1?'':'s') +
       (result.skippedUnknownProject ? ' — skipped ' + result.skippedUnknownProject + ' row(s) with an unrecognized project id' : '') +
-      (result.skippedBadEmail ? ' — skipped ' + result.skippedBadEmail + ' row(s) with a bad email' : '') + '.',
+      (result.skippedBadEmail ? ' — skipped ' + result.skippedBadEmail + ' row(s) with a bad email' : '') +
+      (result.skippedBadSides ? ' — skipped ' + result.skippedBadSides + ' row(s) whose side isn\'t AV, LC or both' : '') + '.',
       'ok'
     );
     loadAccessList();

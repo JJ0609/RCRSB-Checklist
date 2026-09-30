@@ -11,15 +11,6 @@
   }catch(e){}
 })();
 </script>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-43BWZKJ6FF"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-43BWZKJ6FF');
-</script>
 <script>
 // Mandatory login gate - no page here is reachable without an email on file.
 // No real security (no password needed), but every action needs a real
@@ -132,30 +123,35 @@
       </div>
 
       <div class="admin-card">
-        <h2>Project Access</h2>
-        <p class="field-hint" style="margin-top: -6px; margin-bottom: 12px;">
-          Who sees which project in the picker. A project with no grants at all is visible to everyone,
+        <h2>Project access</h2>
+        <p class="field-hint" style="margin-top:-6px;margin-bottom:12px;">
+          Who sees which project in the picker. Each side of a project (AV, LC) is visible to everyone until someone is granted it; after that only the people granted that side see it, so granting LC alone leaves AV open —
           this only controls what shows up in the list, it isn't a security boundary (no password).
         </p>
 
         <div class="field">
           <label for="grantEmail">Grant one person access</label>
-          <input type="text" id="grantEmail" placeholder="johndoe@powerdesigninc.us" style="flex: 1;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="grantEmail" placeholder="name@powerdesigninc.us or *@powerdesigninc.us" style="flex:1;min-width:220px;">
+            <select id="grantProject" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);"></select>
+            <select id="grantSides" title="Which side(s) of the project this person can see" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);">
+              <option value="both">Both sides</option>
+              <option value="av">AV only</option>
+              <option value="lc">LC only</option>
+            </select>
+            <button class="btn" id="grantBtn">Grant</button>
+          </div>
         </div>
-        <div class="field">
-          <select id="grantProject" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface);color:var(--ink);flex: 75%;"></select>
-          <button class="btn" id="grantBtn" style="justify-content: right;">Grant</button>
-        </div>
+
         <div class="field">
           <label for="accessFile">Bulk import (.csv or .xlsx)</label>
           <input type="file" id="accessFile" accept=".csv,.xlsx">
-          <div class="field-hint">Two columns: <b>email</b> and <b>project id</b> (the id shown next to each project above, e.g. "rcrsb") — one row per grant. Adds to existing grants, never removes any.</div>
+          <div class="field-hint">Columns: <b>email</b>, <b>project id</b> (the id shown next to each project above, e.g. "rcrsb") and, optionally, <b>sides</b> (<b>AV</b>, <b>LC</b> or <b>both</b>; leave it blank for both on a new person, or to keep an existing grant as it is) — one row per grant. Import only adds: an existing grant keeps every side it already had. To take a side away, use Revoke in the list below.</div>
         </div>
         <div id="accessMsg"></div>
+
         <div style="margin-top:14px;">
           <div id="accessList">Loading&hellip;</div>
-        </div>
-          </div>
         </div>
       </div>
     </div>

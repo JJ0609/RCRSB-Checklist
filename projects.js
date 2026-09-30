@@ -7,7 +7,7 @@
 let allProjects = [];
 let searchQuery = '';
 let activeRegion = '';   // '' = all regions; resets on every page load
-let statusFilter = 'active';
+let statusFilter = 'active';   // 'active' | 'archived'; resets to active on every page load
 const UNSPECIFIED = 'Unspecified';
 
 // Which side of each project this session is working with — chosen at
@@ -75,7 +75,7 @@ function renderRegionFilter(){
 // confusingly while someone's mid-search, the same way an inbox's
 // unread count doesn't change while you're searching your email.
 function renderStatusFilterButtons(){
-  const activeCount = allProjects.filter(function(p){return !p.archived; }).length;
+  const activeCount = allProjects.filter(function(p){ return !p.archived; }).length;
   const archivedCount = allProjects.filter(function(p){ return p.archived; }).length;
   const activeBtn = document.querySelector('[data-status-filter="active"]');
   const archivedBtn = document.querySelector('[data-status-filter="archived"]');
@@ -129,9 +129,9 @@ function render(){
   if(!list.length){
     content.innerHTML = '<div class="empty" style="padding:60px 20px;">'
       + '<div style="font-weight:800;font-size:16px;margin-bottom:6px;color:var(--ink);">'
-      + (allProjects.length ? 'No projects match your filters.' : 'No ' + DEVICE_TYPE_LABEL + ' projects yet.')
+      + (allProjects.length ? 'No projects match your filters.' : 'No ' + DEVICE_TYPE_LABEL + ' projects yet')
       + '</div>'
-      + (allProjects.length ? '' : '<div>A project shows up here once an ' + DEVICE_TYPE_LABEL + ' Info Sheet has been uploaded for it. Ask an admin to add one from the <a href="admin.html" style="color:var(--accent);font-weight:700;">admin panel</a>.</div>')
+      + (allProjects.length ? '' : '<div>A project shows up here once an ' + DEVICE_TYPE_LABEL + ' Info Sheet has been uploaded for it and, if the project is restricted, you have been given its ' + DEVICE_TYPE_LABEL + ' side. Ask an admin to upload one or grant you access from the <a href="admin.html" style="color:var(--accent);font-weight:700;">admin panel</a>.</div>')
       + '</div>';
     return;
   }
@@ -211,7 +211,7 @@ document.getElementById('searchInput').addEventListener('input', function(e){
 (function setupHeader(){
   const title = document.getElementById('pageTitle');
   if(title) title.textContent = DEVICE_TYPE_LABEL + ' Projects';
-  document.title = DEVICE_TYPE_LABEL + ' Projects';
+  document.title = DEVICE_TYPE_LABEL + ' Projects \u2014 Power Design Commissioning';
 
   const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
   const switchLink = document.getElementById('switchSideLink');
