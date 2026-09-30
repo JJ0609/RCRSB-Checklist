@@ -411,7 +411,7 @@ function deviceCardHtml(d, showLocation){
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(d.dinRail) html += '<span>DIN <b>' + esc(d.dinRail) + '</b></span>';
-  if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
+  if(d.connection) html += '<span>Connection <b>' + esc(d.connection) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
