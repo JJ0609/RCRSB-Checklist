@@ -112,7 +112,7 @@ async function loadProjectList(){
         + '<div><div class="name">' + esc(p.name) + (p.archived ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">(Archived)</span>' : '') + '</div>'
         + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' AV &middot; ' + (lcCounts[p.id] || 0) + ' LC' + ' &middot; ' + esc(accessSummary) + '</div>'
         + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
-        + '<div style="display:flex;gap:8px;flex:none;">'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-sync-file="' + esc(p.id) + '" style="display:none;">'
@@ -125,6 +125,7 @@ async function loadProjectList(){
         + '</div>';
     }).join('');
   }catch(e){
+
     el.innerHTML = '<div class="field-hint">Couldn\'t load the project list.</div>';
   }
 }
