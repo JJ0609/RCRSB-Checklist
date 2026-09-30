@@ -228,7 +228,7 @@ document.getElementById('searchInput').addEventListener('input', function(e){
   if(logoutLink){
     logoutLink.addEventListener('click', function(e){
       e.preventDefault();
-      if(!confirm('Are you sure you want to leave?')) return;
+      if(!confirm('Are you sure you want to log out?')) return;
       try{
         sessionStorage.removeItem('pd_user_email');
         sessionStorage.removeItem('pd_tech_name');
