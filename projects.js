@@ -129,9 +129,9 @@ function render(){
   if(!list.length){
     content.innerHTML = '<div class="empty" style="padding:60px 20px;">'
       + '<div style="font-weight:800;font-size:16px;margin-bottom:6px;color:var(--ink);">'
-      + (allProjects.length ? 'No projects match your filters.' : 'No projects yet.')
+      + (allProjects.length ? 'No projects match your filters.' : 'No ' + DEVICE_TYPE_LABEL + ' projects yet.')
       + '</div>'
-      + (allProjects.length ? '' : '<div>Ask an admin to add one from the <a href="admin.html" style="color:var(--accent);font-weight:700;">admin panel</a>.</div>')
+      + (allProjects.length ? '' : '<div>A project shows up here once an ' + DEVICE_TYPE_LABEL + ' Info Sheet has been uploaded for it. Ask an admin to add one from the <a href="admin.html" style="color:var(--accent);font-weight:700;">admin panel</a>.</div>')
       + '</div>';
     return;
   }
