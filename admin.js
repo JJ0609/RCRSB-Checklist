@@ -109,20 +109,18 @@ async function loadProjectList(){
       const emails = Array.isArray(p.allowedEmails) ? p.allowedEmails : [];
       const accessSummary = emails.length ? ('Visible to ' + emails.length + ' email' + (emails.length===1?'':'s')) : 'Visible to everyone';
       return '<div class="admin-row">'
-        + '<div><div class="name">' + esc(p.name) + (p.archived ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">(Archived)</span>' : '') + '</div>'
+        + '<div class="info"><div class="name">' + esc(p.name) + (p.archived ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">(Archived)</span>' : '') + '</div>'
         + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' AV &middot; ' + (lcCounts[p.id] || 0) + ' LC' + ' &middot; ' + esc(accessSummary) + '</div>'
         + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
-        + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        + '<div class="row-actions">'
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-import-file="' + esc(p.id) + '" style="display:none;">'
         + '<input type="file" accept=".xlsx" data-sync-file="' + esc(p.id) + '" style="display:none;">'
-        + '<div style="flex-wrap:wrap">'
         + '<button class="btn" data-update="' + esc(p.id) + '" title="Detects AV or LC automatically from the sheet the file contains">Update Devices</button>'
         + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
         + '<button class="btn" data-sync="' + esc(p.id) + '" style="border-color:var(--open);color:var(--open);" title="Detects AV or LC automatically. Adds/updates devices AND removes any device or location missing from the file">Sync Devices (removes missing)</button>'
         + '<button class="btn" data-archive="' + esc(p.id) + '" data-currently-archived="' + (p.archived ? '1' : '0') + '">' + (p.archived ? 'Unarchive' : 'Archive') + '</button>'
         + '<button class="btn" data-delete="' + esc(p.id) + '" style="border-color:var(--fail);color:var(--fail);">Delete</button>'
-        + '</div>'
         + '</div>'
         + '</div>';
     }).join('');
@@ -210,19 +208,6 @@ document.getElementById('projectList').addEventListener('change', async function
     const btn = document.querySelector('[data-import="' + CSS.escape(id) + '"]');
     if(!file) return;
 
-    if(!confirm(
-      'Import results for "' + id + '" from ' + file.name + '?\n\n' +
-      'This must be a "Device Report" exported from this app (or an edited copy of one). ' +
-      'Every field it contains - Location, Device Name, Model, IP, IP ID, AV I/O, Note, ' +
-      'Power/Network/Function, and the Punch List sheet - will OVERWRITE the current values ' +
-      'for matching rows (matched by Device ID / Punch ID, not by name). New rows with a blank ' +
-      'Punch ID are created as new punch items. If this file is older than the live data, ' +
-      're-uploading it can revert newer changes.'
-    )){
-      importInput.value = '';
-      return;
-    }
-
     btn.disabled = true;
     const originalLabel = btn.textContent;
     if(statusEl) statusEl.textContent = 'Reading file...';
@@ -231,16 +216,37 @@ document.getElementById('projectList').addEventListener('change', async function
       const workbook = XLSX.read(buf, {type: 'array'});
       const rows = parseDeviceReportForSync(workbook);
       const punchRows = parsePunchListForSync(workbook);
+
+      //Confirm now to see what the file turned out to be
+      const typeLabel = rows.kind === 'lc' ? 'LC' : 'AV';
+      const fieldList = rows.kind === 'lc'
+      ? 'Location, Device Name, Model, Cresnet ID, DIN Rail, Processor, IP Address, IP ID, Connection, Note, Power/Network/Function'
+      : 'Location, Device Name, Model, IP, IP ID, AV I/O, Note, Power/Network/Function';
+      if(!confirm(
+        'Import ' + typeLabel + ' results for "' + id + '" from ' + file.name + '?\n\n' +
+        'Detected an ' + typeLabel + ' Device Report: ' + rows.length + ' device row' + (rows.length===1?'':'s') +
+        ' and ' + punchRows.length + ' punch row' + (punchRows.length ===1?'':'s') + '.\n\n' +
+        'Every field it contains - ' + fieldList + ', and the punch list sheet - will OVERWRITE the current values ' +
+        'for matching rows (matched by Device ID / Punch ID, not by name). A field the file has no column for is left alone. ' +
+        'New rows with a blank Punch ID are created as new punch items. If this file is older than the live data, ' +
+        're-uploading it can revert newer changes.'
+      )){
+        if(statusEl) statusEl.textContent = '';
+        return;
+      }
+
       if(statusEl) statusEl.textContent = 'Uploading ' + rows.length + ' device rows and ' + punchRows.length + ' punch rows...';
       const result = await adminFetch('/api/admin/projects/import-results', {
         method: 'POST',
         body: JSON.stringify({id: id, rows: rows, punches: punchRows})
       });
+      const unmatched = (result.devicesInFile !== undefined) ? (result.devicesInFile - result.devicesUpdated) : 0;
       if(statusEl) statusEl.textContent =
-        'Synced ' + result.devicesUpdated + ' device field' + (result.devicesUpdated===1?'':'s') +
+        'Synced ' + result.devicesUpdated + (result.devicesInFile !== undefined ? ' of ' + result.devicesInFile : '') + ' device row' + (result.devicesInFile === 1 ? '':'s') +
         ', ' + result.checklistUpdated + ' checklist row' + (result.checklistUpdated===1?'':'s') +
         ', ' + result.punchesUpdated + ' punch update' + (result.punchesUpdated===1?'':'s') +
-        ', ' + result.punchesCreated + ' new punch item' + (result.punchesCreated===1?'':'s') + '.';
+        ', ' + result.punchesCreated + ' new punch item' + (result.punchesCreated===1?'':'s') + '.' +
+        (unmatched > 0 ? ' ' + unmatched + ' device ID' + (unmatched===1?'':'s') + ' in tthe file ' + (unmatched===1?'was':'were') + ' not found in this project.' : '');
       setTimeout(loadProjectList, 5000);
     }catch(e){
       console.error(e);
@@ -791,6 +797,10 @@ function parseDeviceReportForSync(workbook){
       else if(h === 'network') found.network = c;
       else if(h === 'function') found.function = c;
       else if(h === 'note') found.note = c;
+      else if(h === 'cresnetid') found.cresnetId = c;
+      else if(h === 'dinrail') found.dinRail = c;
+      else if(h === 'processor' || h === 'controller') found.controller = c;
+      else if(h === 'connection') found.connection = c;
     }
     if(found.deviceId !== undefined){ headerRow = r; cols = found; break; }
   }
@@ -808,23 +818,34 @@ function parseDeviceReportForSync(workbook){
   for(let r = headerRow + 1; r <= range.e.r; r++){
     const deviceId = cellStr(r, cols.deviceId);
     if(!deviceId) continue;
+    //A field is only reported when the file has a column for it, so a column
+    //the file doesn't carry (an LC report has no zone/Amp Channel, etc.
+    //an AV report no cresnet ID / DIN rail etc.) is left alone on import instead
+    //of being blanked. A column that IS there but is empty clears the value.
+    const f = function(key){ return cols[key] === undefined ? undefined : cellStr(r, cols[key]); };
     rows.push({
       deviceId: deviceId,
-      location: cellStr(r, cols.location),
-      name: cellStr(r, cols.name),
-      zone: cellStr(r, cols.zone),
-      channel: cellStr(r, cols.channel),
-      model: cellStr(r, cols.model),
-      ip: cellStr(r, cols.ip),
-      ipid: cellStr(r, cols.ipid),
-      avio: cellStr(r, cols.avio),
-      note: cellStr(r, cols.note),
+      location: f('location'),
+      name: f('name'),
+      zone: f('zone'),
+      channel: f('channel'),
+      model: f('model'),
+      ip: f('ip'),
+      ipid: f('ipid'),
+      avio: f('avio'),
+      note: f('note'),
+      cresnetId: f('cresnetId'),
+      controller: f('controller'),
+      dinRail: f('dinRail'),
+      connection: f('connection'),
       power: parseCheckLabelXlsx(cellStr(r, cols.power)),
       network: parseCheckLabelXlsx(cellStr(r, cols.network)),
       function: parseCheckLabelXlsx(cellStr(r, cols.function))
     });
   }
   if(!rows.length) throw new Error('No device rows found below the header.');
+  //Which kind of export this is - the LC one has the Cresnet columns.
+  rows.kind = (cols.cresnetId !== undefined || cols.dinRail !== undefined || cols.controller !== undefined || cols.connection !== undefined) ? 'lc' : 'av';
   return rows;
 }
 
