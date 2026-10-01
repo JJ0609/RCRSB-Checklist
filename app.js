@@ -408,14 +408,14 @@ function deviceCardHtml(d, showLocation){
     + '</div></div>';
   html += '<div class="device-data mono">';
   if(d.cresnetId) html += '<span>Cresnet ID <b>' + esc(d.cresnetId) + '</b></span>';
-  if(d.controller) html += '<span>Ctrl <b>' + esc(d.controller) + '</b></span>';
+  if(d.controller) html += '<span>Processor <b>' + esc(d.controller) + '</b></span>';
   // On an LC device the IP / IP ID belong to its controller, not to the device itself
-  if(d.ip) html += '<span>' + (d.controller ? 'Ctrl IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
-  if(d.ipid) html += '<span>' + (d.controller ? 'Ctrl ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
+  if(d.ip) html += '<span>' + (d.controller ? 'Processor IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
+  if(d.ipid) html += '<span>' + (d.controller ? 'Processor ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(d.dinRail) html += '<span>DIN <b>' + esc(d.dinRail) + '</b></span>';
-  if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
+  if(d.connection) html += '<span>Connection <b>' + esc(d.connection) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
