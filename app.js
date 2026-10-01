@@ -1194,7 +1194,7 @@ async function exportDeviceReport(){
       });
       [c.power, c.network, c.function].forEach(function(v, i){
         const st = checkCellStyle(v);
-        const cell = row.getCell(+i);
+        const cell = row.getCell(7+i);
         cell.value = st.label;
         cell.fill = xlFill(st.bg);
         cell.font = {bold:true, color:{argb: st.txt}};
@@ -1227,7 +1227,7 @@ async function exportDeviceReport(){
       r++;
     });
 
-    const devWidths = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
+    const devWidths = [{width:20},{width:26},{width:20},{width:26},{width:15},{width:12},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
     if(DEVICE_TYPE === 'lc') devWidths.push({width:12},{width:28},{width:14},{width:16});
     ws.columns = devWidths;
     ws.views = [{state:'frozen', ySplit:3}];
