@@ -1220,7 +1220,7 @@ async function exportDeviceReport(){
       r++;
     });
 
-    const devWidths = [{width:20},{width:26},{width:20},{width:26},{width:15},{width:12},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19},{width:12},{width:28},{width:14},{width:16}];
+    const devWidths = [{width:20},{width:26},{width:20},{width:26},{width:15},{width:12},{width:20},{width:20},{width:11},{width:16},{width:19},{width:19},{width:25},{width:25},{width:25},{width:25},{width:25},{width:25}];
     ws.columns = devWidths;
     ws.views = [{state:'frozen', ySplit:3}];
   }
