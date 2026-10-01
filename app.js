@@ -1105,7 +1105,7 @@ async function exportDeviceReport(){
     // since some projects reuse the same name across different rooms.
     let deviceHeaders = '';
     const avDeviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
-    const lcDeviceHeaders = ['Device ID','Location','Device Name','Model','IP Address','IP ID','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
+    const lcDeviceHeaders = ['Device ID','Location','Device Name','Model','Cresnet ID','DIN Rail','Processor','IP Address','IP ID', 'Connection','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
     if(DEVICE_TYPE === 'av'){
       deviceHeaders = avDeviceHeaders;
     }
@@ -1186,7 +1186,7 @@ async function exportDeviceReport(){
       idCell.value = d.id;
       idCell.fill = xlFill(band);
       idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
-      const plainVals = [d.location, d.name, d.model, d.cresnetId, d.controller, d.ipid, d.ip, d.dinRail, d.connection];
+      const plainVals = [d.location, d.name, d.model, d.cresnetId, d.dinRail, d.controller, d.ipid, d.ip, d.connection];
       plainVals.forEach(function(v, i){
         const cell = row.getCell(i+2);
         cell.value = v || '';
