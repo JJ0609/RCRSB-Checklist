@@ -1120,7 +1120,7 @@ async function exportDeviceReport(){
       if(a.location !== b.location) return a.location < b.location ? -1 : 1;
       return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
     });
-
+    if(DEVICE_TYPE === 'av'){
     let r = 4;
     sortedDevices.forEach(function(d, idx){
       const c = getCheck(d.id);
@@ -1175,6 +1175,63 @@ async function exportDeviceReport(){
     if(DEVICE_TYPE === 'lc') devWidths.push({width:12},{width:28},{width:14},{width:16});
     ws.columns = devWidths;
     ws.views = [{state:'frozen', ySplit:3}];
+  }
+  else if(DEVICE_TYPE === 'lc'){
+    let r = 4;
+    sortedDevices.forEach(function(d, idx){
+      const c = getCheck(d.id);
+      const row = ws.getRow(r);
+      const band = (idx % 2 === 1) ? XL_COLORS.STEEL : XL_COLORS.WHITE;
+      const idCell = row.getCell(1);
+      idCell.value = d.id;
+      idCell.fill = xlFill(band);
+      idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
+      const plainVals = [d.location, d.name, d.model, d.ip, d.ipid];
+      plainVals.forEach(function(v, i){
+        const cell = row.getCell(i+2);
+        cell.value = v || '';
+        cell.fill = xlFill(band);
+      });
+      [c.power, c.network, c.function].forEach(function(v, i){
+        const st = checkCellStyle(v);
+        const cell = row.getCell(+i);
+        cell.value = st.label;
+        cell.fill = xlFill(st.bg);
+        cell.font = {bold:true, color:{argb: st.txt}};
+      });
+      // Audit trail: who last touched a Power/Network/Function check on
+      // this device, and when, this is the accountability record for
+      // the exported sheet, not just a snapshot of the current status.
+      const updByCell = row.getCell(10);
+      updByCell.value = c.updatedBy || '';
+      updByCell.fill = xlFill(band);
+      const updAtCell = row.getCell(11);
+      updAtCell.value = formatEasternTime(c.updatedAt);
+      updAtCell.fill = xlFill(band);
+      const noteCell = row.getCell(12);
+      noteCell.value = d.note || '';
+      noteCell.fill = xlFill(band);
+      const noteByCell = row.getCell(13);
+      noteByCell.value = d.noteUpdatedBy || '';
+      noteByCell.fill = xlFill(band);
+      const noteAtCell = row.getCell(14);
+      noteAtCell.value = formatEasternTime(d.noteUpdatedAt);
+      noteAtCell.fill = xlFill(band);
+      if(DEVICE_TYPE === 'lc'){
+        [d.cresnetId, d.controller, d.dinRail, d.connection].forEach(function(v, i){
+          const cell = row.getCell(15 + i);
+          cell.value = v || '';
+          cell.fill = xlFill(band);
+        });
+      }
+      r++;
+    });
+
+    const devWidths = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
+    if(DEVICE_TYPE === 'lc') devWidths.push({width:12},{width:28},{width:14},{width:16});
+    ws.columns = devWidths;
+    ws.views = [{state:'frozen', ySplit:3}];
+  }
 
     // ---- Sheet 2: Punch List ----
     const pl = wb.addWorksheet('Punch List');
