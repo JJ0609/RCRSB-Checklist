@@ -1103,8 +1103,15 @@ async function exportDeviceReport(){
     // "Device ID" is the stable join key for re-importing this file later
     // (see importChecklistResults) — device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
-    const deviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
-    if(DEVICE_TYPE === 'lc') deviceHeaders.push('Cresnet ID','Controller','DIN Rail','Connection');
+    let deviceHeaders = '';
+    const avDeviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
+    const lcDeviceHeaders = ['Device ID','Location','Device Name','Model','IP Address','IP ID','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
+    if(DEVICE_TYPE === 'av'){
+      deviceHeaders = avDeviceHeaders;
+    }
+    else if(DEVICE_TYPE === 'lc'){
+      deviceHeaders = lcDeviceHeaders
+    }
     const deviceHeaderRow = ws.getRow(3);
     deviceHeaders.forEach(function(h, i){ deviceHeaderRow.getCell(i+1).value = h; });
     styleHeaderRow(deviceHeaderRow, deviceHeaders.length);
