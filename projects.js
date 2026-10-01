@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Project picker — lists every project in the database and links
+// Project picker - lists every project in the database and links
 // into index.html?project=<id> for the one the person picks.
 // Load order: config.js (defines SYNC_API_BASE, REGIONS), then this file.
 // ─────────────────────────────────────────────────────────────
@@ -10,7 +10,7 @@ let activeRegion = '';   // '' = all regions; resets on every page load
 let statusFilter = 'active';   // 'active' | 'archived'; resets to active on every page load
 const UNSPECIFIED = 'Unspecified';
 
-// Which side of each project this session is working with — chosen at
+// Which side of each project this session is working with - chosen at
 // login (see login.js) and stored alongside the email. Projects
 // themselves are shared between sides; only the device counts here,
 // and everything inside a project, are scoped by it. Anything
@@ -38,7 +38,7 @@ function matchesSearch(text){
   return String(text || '').toLowerCase().indexOf(searchQuery.toLowerCase()) !== -1;
 }
 
-// Defensive against every falsy-ish region value a project might have —
+// Defensive against every falsy-ish region value a project might have -
 // real null, JS undefined, or (seen in the wild) the literal string
 // "undefined" coming back from an older row that predates this column.
 // Anything that isn't a real region name from REGIONS collapses to the
@@ -51,7 +51,7 @@ function projectRegion(p){
 
 // Dropdown options: every region in REGIONS (config.js), in that fixed
 // order, plus "Unspecified" at the end if any project actually falls
-// into that bucket. Regions with zero projects still show — an empty
+// into that bucket. Regions with zero projects still show - an empty
 // region is a real state worth seeing, not something to hide.
 function regionsForFilter(){
   const list = (typeof REGIONS !== 'undefined' ? REGIONS.slice() : []);
@@ -71,7 +71,7 @@ function renderRegionFilter(){
 
 // Counts reflect every project this account can see (matching the
 // server's email-based filtering already applied to allProjects),
-// independent of search/region — so the tab counts don't shift around
+// independent of search/region - so the tab counts don't shift around
 // confusingly while someone's mid-search, the same way an inbox's
 // unread count doesn't change while you're searching your email.
 function renderStatusFilterButtons(){
@@ -152,7 +152,7 @@ function render(){
 
   // One region selected (via dropdown, or only one region present after
   // search) → skip the heading entirely, it'd just repeat what's already
-  // selected. Otherwise, a bold loc-header per region — reusing the same
+  // selected. Otherwise, a bold loc-header per region - reusing the same
   // h2 + meta styling as the location-detail page, so it reads as an
   // actual section heading rather than the small uppercase project-count
   // label used elsewhere on this page.
@@ -204,7 +204,7 @@ document.getElementById('searchInput').addEventListener('input', function(e){
 });
 
 // Heading + the two session controls. Switching sides just flips the
-// stored side and reloads — the person is already identified by email,
+// stored side and reloads - the person is already identified by email,
 // so nothing is bypassed; it's the same login viewed from the other
 // side. Log out clears everything (including a cached admin password,
 // which would otherwise linger on a shared computer) and returns to login.

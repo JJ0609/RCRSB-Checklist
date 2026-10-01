@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────
-// RCRSB Commissioning — app logic
+// RCRSB Commissioning - app logic
 //
 // Load order matters: config.js must load before this file (it defines
-// SYNC_API_BASE, SYNC_POLL_MS). devices.js is no longer used — device
+// SYNC_API_BASE, SYNC_POLL_MS). devices.js is no longer used - device
 // data now lives in the database and is fetched at runtime per project
 // (see fetchDevices below). See index.html <script> tags at the bottom
 // of <body>.
@@ -16,13 +16,13 @@ const CHECKS = [
 const SEVERITIES = ['minor','major','critical'];
 const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration'];
 // Sentinel for the shared location-punch form/state below, meaning "no
-// location at all — a project-wide item." Never collides with a real
+// location at all - a project-wide item." Never collides with a real
 // location name (those always come from actual devices/locations).
 const PROJECT_WIDE_SCOPE = '__PROJECT_WIDE__';
 
 // Which side of the project this page is showing: "av" (the original
 // side) or "lc" (Local Cresnet / lighting control). Same project either
-// way — the two sides just have separate devices, locations, checklist
+// way - the two sides just have separate devices, locations, checklist
 // status, and punch items. The link that got here says which (?type=),
 // falling back to the side chosen at login; whichever wins is written
 // back to the session so the switcher, the projects page, and this page
@@ -149,7 +149,7 @@ function openPunchCount(locationName){
   return punches.filter(function(p){ return p.status === 'open' && (!locationName || p.location === locationName); }).length;
 }
 
-// "Done" means fully tested AND every check passed — being fully tested
+// "Done" means fully tested AND every check passed - being fully tested
 // with a failure still needs attention, so it gets its own badge instead
 // of being lumped in with "done".
 function locationBadgeHtml(st, openCt){
@@ -293,13 +293,13 @@ function renderLocationDetail(){
   }
 }
 
-// A punch item with no device — reported against a specific location,
+// A punch item with no device - reported against a specific location,
 // or (with PROJECT_WIDE_SCOPE) against the project as a whole, for
 // things that aren't tied to any one place: waiting on client drawings,
 // a contractor scheduling issue, anything that would otherwise become
 // orphaned if the location it was filed under ever got renamed or
 // removed. Shares SEVERITIES/OWNERSHIPS and the same
-// pendingSeverity/pendingOwnership state as every other punch form —
+// pendingSeverity/pendingOwnership state as every other punch form -
 // only one of these is ever open at a time in practice.
 function locationPunchFormHtml(){
   const isProjectWide = addingLocationPunchFor === PROJECT_WIDE_SCOPE;
@@ -375,7 +375,7 @@ function renderFailedChecks(){
 }
 
 // Notes are the one device field editable in place (see
-// handleEditDeviceNote in the Worker) — a plain block when there's a
+// handleEditDeviceNote in the Worker) - a plain block when there's a
 // note and nothing's being edited, an inline edit form when this device
 // is the one currently being edited, or a small "+ Add note" affordance
 // when there's no note yet at all.
@@ -552,7 +552,7 @@ function renderContent(){
 
 // ---------- sync layer (Cloudflare Worker -> Turso) ----------
 // The Worker is the only thing that holds real database credentials.
-// This page only ever calls a handful of narrow, whitelisted endpoints —
+// This page only ever calls a handful of narrow, whitelisted endpoints -
 // it never sends raw SQL. See /worker/index.js and README.md.
 
 function syncConfigured(){
@@ -674,7 +674,7 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
 // While someone is actively typing a punch description, a background
 // re-render would tear down and rebuild that textarea's DOM node,
 // silently kicking focus out of it every poll cycle (every 5 seconds).
-// Skip the render in that case — the underlying data still updates
+// Skip the render in that case - the underlying data still updates
 // (nothing is lost), the visible screen just catches up next time the
 // person does something that naturally re-renders (submit, cancel,
 // toggle a check, switch tabs).
@@ -685,7 +685,7 @@ function isComposingPunch(){
 }
 
 // Three different punch-entry forms share the same severity/ownership
-// buttons and pendingSeverity/pendingOwnership state — this picks
+// buttons and pendingSeverity/pendingOwnership state - this picks
 // whichever textarea is actually the open one, so clicking a severity
 // button re-focuses the right field regardless of which form is open.
 function activePunchTextareaId(){
@@ -697,7 +697,7 @@ function activePunchTextareaId(){
 // ---------- check taps vs. the poll ----------
 // A tap on Power / Network / Function shows on screen immediately and is
 // sent to the server afterwards. The poll below replaces local state with
-// the server's — so a poll that was already in flight when you tapped (its
+// the server's - so a poll that was already in flight when you tapped (its
 // answer describes the server from BEFORE your tap landed) used to snap the
 // pill back a step, and the next tap then started from the wrong place.
 // Every tapped field is therefore tracked here until the server has provably
@@ -709,7 +709,7 @@ function activePunchTextareaId(){
 //     failing and being retried (offline), and against any poll that STARTED
 //     before the write was confirmed (that poll's answer predates it)
 //   - only a poll that began after the write was confirmed may overwrite it,
-//     which also ends the protection — so other people's later changes to
+//     which also ends the protection - so other people's later changes to
 //     the same field still come through
 // Other fields and other devices are never held back: they take the
 // server's values on every poll as before.
@@ -736,7 +736,7 @@ function sendCheckEdit(e){
   e.sentValue = sent;
   pushCheck(e.deviceId, e.key, sent).then(function(){
     e.settledAt = ++checkClock;
-    if(e.value !== sent){               // tapped again meanwhile — send the latest
+    if(e.value !== sent){               // tapped again meanwhile - send the latest
       e.status = 'idle';
       sendCheckEdit(e);
     }else{
@@ -771,7 +771,7 @@ function mergeRemoteChecklist(remoteChecklist, pollStartedAt){
   return merged;
 }
 
-// What's visible on screen, boiled down — used to tell whether a poll
+// What's visible on screen, boiled down - used to tell whether a poll
 // actually changed anything worth redrawing.
 function stateSignature(cl, pu){
   const c = Object.keys(cl).sort().map(function(id){
@@ -801,7 +801,7 @@ async function syncFromRemote(){
     saveCache();
     // Only rebuild the screen when something visible actually changed (or the
     // connection just came back, which clears the offline banner). Rebuilding
-    // on every poll is what made the page flicker — and swapping buttons out
+    // on every poll is what made the page flicker - and swapping buttons out
     // from under a finger mid-tap can swallow that tap.
     const changed = !wasEnabled || before !== stateSignature(checklist, punches);
     if(!changed || isComposingPunch()){
@@ -1015,7 +1015,7 @@ const XL_COLORS = {
   MAJOR_BG: 'FFFCEEDD', MAJOR_TXT: 'FFB5620A',
   CRITICAL_BG: 'FFF9DADF', CRITICAL_TXT: 'FFC8102E',
   // Ownership colors are deliberately a different hue family (teal/violet/gold)
-  // than severity's red/amber/gray — Severity and Ownership sit side by side
+  // than severity's red/amber/gray - Severity and Ownership sit side by side
   // in the same row, so reusing that palette would make it look like
   // Ownership was also signaling urgency.
   OWN_FIELD_BG: 'FFDFF5F2', OWN_FIELD_TXT: 'FF0E7C71',
@@ -1025,7 +1025,7 @@ const XL_COLORS = {
 function xlFill(argb){ return {type:'pattern', pattern:'solid', fgColor:{argb: argb}}; }
 
 // Every timestamp is stored as UTC (new Date().toISOString() in the
-// Worker) — correct for storage, but not what anyone wants to read in a
+// Worker) - correct for storage, but not what anyone wants to read in a
 // spreadsheet. This converts to US Eastern time for display in the
 // export only; the underlying stored data stays UTC. Uses the real
 // America/New_York timezone rules (not a fixed -5), so it correctly
@@ -1080,7 +1080,7 @@ function sanitizeFilenamePart(s){
 
 async function exportDeviceReport(){
   if(typeof ExcelJS === 'undefined'){
-    alert('The Excel export library didn\'t load — check your connection and reload the page.');
+    alert('The Excel export library didn\'t load - check your connection and reload the page.');
     return;
   }
   const btn = document.getElementById('exportReportBtn');
@@ -1096,12 +1096,12 @@ async function exportDeviceReport(){
     const ws = wb.addWorksheet('Device Report');
     ws.mergeCells('A1:' + (DEVICE_TYPE === 'lc' ? 'V' : 'R') + '1');
     const title = ws.getCell('A1');
-    title.value = projectDisplayName + ' — ' + (DEVICE_TYPE === 'lc' ? 'LC ' : '') + 'Device Report';
+    title.value = projectDisplayName + ' - ' + (DEVICE_TYPE === 'lc' ? 'LC ' : '') + 'Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
     ws.getRow(1).height = 32;
 
     // "Device ID" is the stable join key for re-importing this file later
-    // (see importChecklistResults) — device Name alone isn't reliable
+    // (see importChecklistResults) - device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
     let deviceHeaders = '';
     const avDeviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
@@ -1229,16 +1229,16 @@ async function exportDeviceReport(){
     const pl = wb.addWorksheet('Punch List');
     pl.mergeCells('A1:M1');
     const plTitle = pl.getCell('A1');
-    plTitle.value = projectDisplayName + ' — Punch List';
+    plTitle.value = projectDisplayName + ' - Punch List';
     plTitle.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
     pl.getRow(1).height = 32;
 
     // "Punch ID" and "Device ID" are the join keys re-import uses (see
     // Import Results in admin.html). Leave "Punch ID" blank on a new row
-    // you type by hand to log a new issue offline — it'll be created as
+    // you type by hand to log a new issue offline - it'll be created as
     // new on import. Leave it filled in on an existing row to update it.
     // "Level" isn't stored on a punch item directly (only devices have
-    // one) — looked up from the device this punch is against instead.
+    // one) - looked up from the device this punch is against instead.
     const punchHeaders = ['Punch ID','Device ID','Location','Level','Device Name','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At'];
     const punchHeaderRow = pl.getRow(3);
     punchHeaders.forEach(function(h, i){ punchHeaderRow.getCell(i+1).value = h; });
@@ -1608,14 +1608,14 @@ async function boot(){
   pollTimer = setInterval(syncFromRemote, SYNC_POLL_MS);
 }
 
-// Side switcher + logout. Switching stays in the SAME project — it just
-// opens the project's other side — and the person is already identified
+// Side switcher + logout. Switching stays in the SAME project - it just
+// opens the project's other side - and the person is already identified
 // by email, so nothing is bypassed. An unsent punch draft still gets the
 // existing beforeunload warning, same as any other way of leaving this
 // page. Log out clears everything, including a cached admin password
 // that would otherwise linger on a shared computer.
 // "Switch to LC/AV" only shows when this person was granted the other side of
-// this project — otherwise it would just open a side they weren't given.
+// this project - otherwise it would just open a side they weren't given.
 function updateSwitchAvailability(){
   const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
   const link = document.getElementById('switchSideLink');

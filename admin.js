@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Admin panel — password-gated project management.
+// Admin panel - password-gated project management.
 //
 // The password is sent as the X-Admin-Password header on every admin
 // request; the Worker checks it server-side (see worker/index.js). It's
@@ -13,7 +13,7 @@
 // MAC column). Port Map sheets (any sheet named "Port Map | ..."), rows
 // starting at 7, columns A/B/C/G/H, joined to devices by exact name
 // match. If your Info Sheet format ever changes, update parseWorkbook()
-// here to match — this is the one place that assumption lives.
+// here to match - this is the one place that assumption lives.
 // ─────────────────────────────────────────────────────────────
 
 function syncConfigured(){
@@ -40,7 +40,7 @@ async function adminFetch(path, options){
   }, options));
   if(res.status === 401){
     sessionStorage.removeItem(PW_KEY);
-    showGate('Session expired or password changed — enter it again.');
+    showGate('Session expired or password changed - enter it again.');
     throw new Error('Unauthorized');
   }
   const data = await res.json().catch(function(){ return {}; });
@@ -90,7 +90,7 @@ async function loadProjectList(){
   el.textContent = 'Loading...';
   try{
     // Device counts are per side now (one project can have AV devices, LC
-    // devices, or both), so fetch both and show each — otherwise a project
+    // devices, or both), so fetch both and show each - otherwise a project
     // that only has LC gear would read "0 devices" right after an LC upload.
     const sides = await Promise.all([
       adminFetch('/api/projects?deviceType=av', {method: 'GET'}),
@@ -213,8 +213,8 @@ document.getElementById('projectList').addEventListener('change', async function
     if(!confirm(
       'Import results for "' + id + '" from ' + file.name + '?\n\n' +
       'This must be a "Device Report" exported from this app (or an edited copy of one). ' +
-      'Every field it contains — Location, Device Name, Model, IP, IP ID, AV I/O, Note, ' +
-      'Power/Network/Function, and the Punch List sheet — will OVERWRITE the current values ' +
+      'Every field it contains - Location, Device Name, Model, IP, IP ID, AV I/O, Note, ' +
+      'Power/Network/Function, and the Punch List sheet - will OVERWRITE the current values ' +
       'for matching rows (matched by Device ID / Punch ID, not by name). New rows with a blank ' +
       'Punch ID are created as new punch items. If this file is older than the live data, ' +
       're-uploading it can revert newer changes.'
@@ -273,7 +273,7 @@ document.getElementById('projectList').addEventListener('change', async function
       const typeLabel = deviceType === 'lc' ? 'LC' : 'AV';
 
       // Preview what would actually be deleted before committing to
-      // anything — computed the same way the server will, so the
+      // anything - computed the same way the server will, so the
       // confirmation reflects reality rather than a guess. The server
       // still independently recomputes this itself; nothing here is
       // trusted as the source of truth for the actual deletion.
@@ -303,7 +303,7 @@ document.getElementById('projectList').addEventListener('change', async function
         const preview = toDelete.slice(0, 15).map(function(d){ return d.name || d.id; }).join(', ') + (toDelete.length > 15 ? ', ...' : '');
         confirmMsg += 'It will DELETE ' + toDelete.length + ' ' + typeLabel + ' device' + (toDelete.length===1?'':'s') + ' not in the file: ' + preview + '\n\n';
       } else {
-        confirmMsg += 'No devices will be deleted — everything currently in this project is also in the file.\n\n';
+        confirmMsg += 'No devices will be deleted - everything currently in this project is also in the file.\n\n';
       }
 
       if(locsToRemove.length){
@@ -360,7 +360,7 @@ document.getElementById('projectList').addEventListener('change', async function
     if(!confirm(
       'Detected ' + typeLabel + ' devices. Re-import ' + typeLabel + ' devices for "' + id + '" from ' + file.name + '?\n\n' +
       'This adds new devices and updates matching existing ones (by device ID). ' +
-      'It will NOT delete any device or touch existing checklist/punch data — ' +
+      'It will NOT delete any device or touch existing checklist/punch data - ' +
       'even devices missing from this file are left as-is. ' +
       (typeLabel === 'LC' ? 'AV devices in this project are never affected.' : 'LC devices in this project are never affected.')
     )){
@@ -390,12 +390,12 @@ document.getElementById('projectList').addEventListener('change', async function
 });
 // ---------- project access (who sees what) ----------
 let accessRows = [];             // raw grants from the server, cached client-side
-let accessGroupBy = 'project';   // 'project' | 'email' — resets to project on page load
+let accessGroupBy = 'project';   // 'project' | 'email' - resets to project on page load
 let expandedAccessGroup = null;  // key of the one open accordion card, or null
 
 // Each side of a project is open to everyone until someone is granted it;
 // after that only the people granted it see it. So the first grant on a
-// side RESTRICTS it, and revoking the last grant OPENS it up again — the
+// side RESTRICTS it, and revoking the last grant OPENS it up again - the
 // two helpers below are what the confirmations warn about.
 function sideHasGrants(projectId, side){
   return accessRows.some(function(r){ return r.projectId === projectId && (r.sides === side || r.sides === 'both'); });
@@ -404,7 +404,7 @@ function sidesOfGrant(projectId, email){
   const r = accessRows.find(function(x){ return x.projectId === projectId && x.email === email; });
   return !r ? [] : (r.sides === 'av' ? ['av'] : r.sides === 'lc' ? ['lc'] : ['av', 'lc']);
 }
-// Of the sides being revoked from this person, the ones nobody ELSE covers —
+// Of the sides being revoked from this person, the ones nobody ELSE covers -
 // i.e. that would become visible to everyone.
 function sidesThatWouldOpen(projectId, email, revokedSides){
   return revokedSides.filter(function(side){
@@ -428,7 +428,7 @@ async function loadAccessList(){
 }
 
 // Grouped by project or by person, shown as a one-open-at-a-time
-// accordion rather than everything expanded flat — stays scannable
+// accordion rather than everything expanded flat - stays scannable
 // even with many grants. Both the grouping and the order within each
 // group are alphabetical, not chronological; addedAt still shows per
 // row but no longer drives the structure.
@@ -440,14 +440,14 @@ function renderAccessList(){
     + '</div>';
 
   if(!accessRows.length){
-    html += '<div class="field-hint">No grants yet — every project is visible to everyone.</div>';
+    html += '<div class="field-hint">No grants yet - every project is visible to everyone.</div>';
     el.innerHTML = html;
     return;
   }
 
   // Each group is its own card: a clickable header row plus, only for
   // whichever one key currently matches expandedAccessGroup, the list
-  // of rows underneath. Clicking a header toggles it — opening one
+  // of rows underneath. Clicking a header toggles it - opening one
   // closes whatever else was open, since expandedAccessGroup can only
   // ever hold a single key at a time. Clicking the already-open header
   // again collapses it (handled in the click listener, not here).
@@ -545,7 +545,7 @@ document.getElementById('grantBtn').addEventListener('click', async function(){
       showMsg(msgEl, 'Added ' + addLabel + ' access on all ' + result.granted + ' project' + (result.granted===1?'':'s') + '.', 'ok');
     } else {
       // Sides with no grants yet are open to everyone; this grant is what
-      // limits them to the people granted — say so.
+      // limits them to the people granted - say so.
       const newlyLimited = grantedSides.filter(function(s){ return !sideHasGrants(projectId, s); });
       const result = await adminFetch('/api/admin/access/grant', {
         method: 'POST',
@@ -655,7 +655,7 @@ function normalizeSidesCell(v){
 }
 
 // Reads a CSV or xlsx with "email" and "project id" columns (matched by
-// header text, same approach as everywhere else in this file — tolerant
+// header text, same approach as everywhere else in this file - tolerant
 // of column order, not of a missing/differently-worded header).
 function parseAccessSheet(workbook){
   const sheetName = workbook.SheetNames[0];
@@ -695,7 +695,7 @@ document.getElementById('accessFile').addEventListener('change', async function(
   const file = e.target.files[0];
   const msgEl = document.getElementById('accessMsg');
   if(!file) return;
-  if(typeof XLSX === 'undefined'){ showMsg(msgEl, 'The file-parsing library didn\'t load — check your connection and reload this page.', 'err'); e.target.value=''; return; }
+  if(typeof XLSX === 'undefined'){ showMsg(msgEl, 'The file-parsing library didn\'t load - check your connection and reload this page.', 'err'); e.target.value=''; return; }
   try{
     showMsg(msgEl, 'Reading file...', 'info');
     const buf = await file.arrayBuffer();
@@ -708,9 +708,9 @@ document.getElementById('accessFile').addEventListener('change', async function(
     });
     showMsg(msgEl,
       'Granted ' + result.granted + ' new access row' + (result.granted===1?'':'s') +
-      (result.skippedUnknownProject ? ' — skipped ' + result.skippedUnknownProject + ' row(s) with an unrecognized project id' : '') +
-      (result.skippedBadEmail ? ' — skipped ' + result.skippedBadEmail + ' row(s) with a bad email' : '') +
-      (result.skippedBadSides ? ' — skipped ' + result.skippedBadSides + ' row(s) whose side isn\'t AV, LC or both' : '') + '.',
+      (result.skippedUnknownProject ? ' - skipped ' + result.skippedUnknownProject + ' row(s) with an unrecognized project id' : '') +
+      (result.skippedBadEmail ? ' - skipped ' + result.skippedBadEmail + ' row(s) with a bad email' : '') +
+      (result.skippedBadSides ? ' - skipped ' + result.skippedBadSides + ' row(s) whose side isn\'t AV, LC or both' : '') + '.',
       'ok'
     );
     loadAccessList();
@@ -751,7 +751,7 @@ function normalizeLocation(s){
 
 // Parses this app's OWN "Device Report" export (or a hand-edited copy of
 // one) for the "Import Results" action. Columns are matched by header
-// text — normalized by stripping spaces/pipes/slashes and lowercasing —
+// text - normalized by stripping spaces/pipes/slashes and lowercasing -
 // rather than fixed positions, so it tolerates someone reordering or
 // inserting a column. Requires a "Device ID" column, which only exists
 // in files this app produced (or someone manually added).
@@ -832,7 +832,7 @@ function parseDeviceReportForSync(workbook){
 // Same header-matching approach as parseDeviceReportForSync. A row with
 // "Punch ID" filled in updates that existing item; a row with a blank
 // Punch ID but a valid Device ID is a brand-new item someone typed by
-// hand — it gets created on import. This sheet is optional: if it's
+// hand - it gets created on import. This sheet is optional: if it's
 // missing or can't be parsed, the caller just gets an empty array back
 // so the Device Report sync can still proceed on its own.
 function parsePunchListForSync(workbook){
@@ -895,29 +895,29 @@ function parsePunchListForSync(workbook){
 
 function parseWorkbook(workbook){
   // Tolerates spacing variants ("Device Info", "DeviceInfo", "Device  Info")
-  // but not typos or renamed sheets — those get a clear error listing what
+  // but not typos or renamed sheets - those get a clear error listing what
   // sheet names actually exist, instead of a silent wrong match.
   const normalize = function(n){ return n.replace(/\s+/g, '').toLowerCase(); };
   const diNames = workbook.SheetNames.filter(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo' || normalize(n) === 'devicereport'; });
   if(!diNames.length){
     throw new Error(
       'No "Device Info" sheet found. Sheet names in this file: ' +
-      (workbook.SheetNames.length ? workbook.SheetNames.join(', ') : '(none found — is this a valid .xlsx file?)')
+      (workbook.SheetNames.length ? workbook.SheetNames.join(', ') : '(none found - is this a valid .xlsx file?)')
     );
   }
 
-  // Columns are matched by header text, not fixed position — the real
+  // Columns are matched by header text, not fixed position - the real
   // template is still evolving (columns get added, split, reordered),
   // so this adapts automatically instead of needing a code edit every
   // time the layout changes. Zone and Amp Channel are detected as either
   // one combined column ("Zone # + Amp Channel") or two separate ones,
   // whichever the file actually has. MAC Address, VLAN, USERNAME, and
-  // PASSWORD are recognized but intentionally never stored — no field
+  // PASSWORD are recognized but intentionally never stored - no field
   // for MAC/VLAN yet, and credentials shouldn't go into a login-free app.
   const normHeader = function(h){ return String(h || '').replace(/[\s#+|/]+/g, '').toLowerCase(); };
 
   // Splits a combined "Zone # + Amp Channel" cell like "Zone 7 Channel 3"
-  // into separate zone/channel values ("7" and "3" — the display already
+  // into separate zone/channel values ("7" and "3" - the display already
   // adds its own "Zone"/"Ch" labels). Falls back to keeping the whole raw
   // text in zone (with channel left blank) if it doesn't match the
   // expected pattern, so nothing silently disappears on an unusual row.
@@ -930,8 +930,8 @@ function parseWorkbook(workbook){
   }
 
   // Parses ONE Device Info-like sheet into an array of device objects.
-  // Multiple sheets matching "Device Info" are treated as intentional —
-  // e.g. one per building on a multi-building project — and every
+  // Multiple sheets matching "Device Info" are treated as intentional -
+  // e.g. one per building on a multi-building project - and every
   // matching sheet gets merged into a single device list below, rather
   // than only reading the first one and silently ignoring the rest.
   // Header detection runs independently per sheet, so sheets with
@@ -962,7 +962,7 @@ function parseWorkbook(workbook){
       if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
     }
     if(headerRow === null){
-      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" — check the header row is present and spelled recognizably.');
+      throw new Error('Couldn\'t find a "Component Name" or "Device Name" column in "' + diName + '" - check the header row is present and spelled recognizably.');
     }
 
     const sheetDevices = [];
@@ -1055,7 +1055,7 @@ function parseWorkbook(workbook){
 }
 
 // Parses a raw "LCS Devices" Info Sheet. That sheet is hierarchical: a
-// "Device" (a controller / panel — the one carrying the IP Address and
+// "Device" (a controller / panel - the one carrying the IP Address and
 // IP ID) followed by the Local Cresnet Devices wired to it, one per row,
 // each with its own Cresnet ID, Installed Location, DIN Rail, Model #
 // and Connection. The Cresnet devices are what actually get
@@ -1071,12 +1071,12 @@ function parseWorkbook(workbook){
 //   controller  <- the Device it belongs to, plus where that controller
 //                  lives when its own row says so ("LCP-DPC1 @ BOH Corridor 129")
 //   ip / ipid   <- the controller's IP Address / IP ID. The sheet lists them
-//                  once per group, so every child inherits them — even a
+//                  once per group, so every child inherits them - even a
 //                  child that sits above the row they happen to be typed on
 //   dinRail, connection, model, note <- straight from the row
 // A Cresnet device name that appears in more than one group gets its
-// controller appended to the id — for every occurrence, not by row
-// order — so ids stay stable when the sheet is re-uploaded.
+// controller appended to the id - for every occurrence, not by row
+// order - so ids stay stable when the sheet is re-uploaded.
 function parseLcsWorkbook(workbook){
   const sheetName = workbook.SheetNames.find(function(n){ return n.trim().toLowerCase() === 'lcs devices'; });
   if(!sheetName){
@@ -1115,7 +1115,7 @@ function parseLcsWorkbook(workbook){
     if(found.child !== undefined){ headerRow = r; cols = found; break; }
   }
   if(headerRow === null){
-    throw new Error('Couldn\'t find a "Local Cresnet Devices" column in the "LCS Devices" sheet — check the header row is present and spelled recognizably.');
+    throw new Error('Couldn\'t find a "Local Cresnet Devices" column in the "LCS Devices" sheet - check the header row is present and spelled recognizably.');
   }
 
   // The sheet's last column (values like "Z-MT2-13") can come with no
@@ -1187,7 +1187,7 @@ function parseLcsWorkbook(workbook){
     });
   });
   if(!devices.length){
-    throw new Error('No Cresnet devices found in "LCS Devices" — each device needs a name in the "Local Cresnet Devices" column.');
+    throw new Error('No Cresnet devices found in "LCS Devices" - each device needs a name in the "Local Cresnet Devices" column.');
   }
 
   const nameCounts = {};
@@ -1207,8 +1207,8 @@ function parseLcsWorkbook(workbook){
 }
 
 // AV and LC files are distinguished purely by which sheet they contain
-// — "Device Info"/"Component Info"/"Device Report" for AV, "LCS
-// Devices" for LC — so the person never has to say which one they're
+// - "Device Info"/"Component Info"/"Device Report" for AV, "LCS
+// Devices" for LC - so the person never has to say which one they're
 // uploading; the file already says so. Both present in one file is
 // treated as a mistake rather than a guess, since silently picking one
 // side could mean the other type's devices go completely unnoticed.
@@ -1217,7 +1217,7 @@ function detectDeviceType(workbook){
   const hasAv = workbook.SheetNames.some(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo' || normalize(n) === 'devicereport'; });
   const hasLc = workbook.SheetNames.some(function(n){ return n.trim().toLowerCase() === 'lcs devices'; });
   if(hasAv && hasLc){
-    throw new Error('This file has both a "Device Info"-style sheet and an "LCS Devices" sheet — upload one file per type so it\'s clear which set of devices this is.');
+    throw new Error('This file has both a "Device Info"-style sheet and an "LCS Devices" sheet - upload one file per type so it\'s clear which set of devices this is.');
   }
   if(hasAv) return 'av';
   if(hasLc) return 'lc';
@@ -1240,7 +1240,7 @@ document.getElementById('createBtn').addEventListener('click', async function(){
   if(!name){ showMsg(msgEl, 'Project name is required.', 'err'); return; }
   if(!/^[a-z0-9-]{1,80}$/.test(id)){ showMsg(msgEl, 'Project ID must be lowercase letters, numbers, and hyphens only.', 'err'); return; }
   if(!file){ showMsg(msgEl, 'Choose an .xlsx file.', 'err'); return; }
-  if(typeof XLSX === 'undefined'){ showMsg(msgEl, 'The Excel-parsing library didn\'t load — check your connection and reload this page.', 'err'); return; }
+  if(typeof XLSX === 'undefined'){ showMsg(msgEl, 'The Excel-parsing library didn\'t load - check your connection and reload this page.', 'err'); return; }
 
   const btn = document.getElementById('createBtn');
   btn.disabled = true;
@@ -1280,7 +1280,7 @@ document.getElementById('createBtn').addEventListener('click', async function(){
 // ---------- boot ----------
 (function(){
   if(!syncConfigured()){
-    document.getElementById('gate').innerHTML = '<div class="field-hint">SYNC_API_BASE is not set in config.js — the admin panel needs a configured Worker to do anything. See README.md.</div>';
+    document.getElementById('gate').innerHTML = '<div class="field-hint">SYNC_API_BASE is not set in config.js - the admin panel needs a configured Worker to do anything. See README.md.</div>';
     return;
   }
   const cached = sessionStorage.getItem(PW_KEY);

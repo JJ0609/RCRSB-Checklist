@@ -14,7 +14,7 @@
 <script>
 // Applied before stylesheets load so there's no flash of the wrong theme.
 // This is the one thing intentionally inlined rather than split into
-// app.js — it has to run before first paint, so it can't wait for an
+// app.js - it has to run before first paint, so it can't wait for an
 // external file to load.
 (function(){
   try{
@@ -29,7 +29,7 @@
 // identity attached, and the project picker needs to know whos asking.
 (function(){
   try{
-    // A complete login is an email AND a chosen side (AV/LC) — an email
+    // A complete login is an email AND a chosen side (AV/LC) - an email
     // alone (e.g. a session from before sides existed) goes back to login.
     if(!sessionStorage.getItem('pd_user_email') || !sessionStorage.getItem('pd_device_type')){
       var here = window.location.pathname.split('/').pop() + window.location.search;
