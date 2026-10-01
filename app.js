@@ -44,6 +44,10 @@ let currentProjectMeta = { name: '', shortName: '' };
 // with the device list. Assumed open until told otherwise (older Worker,
 // offline cache) so nothing disappears by accident.
 let currentAccess = {av: true, lc: true};
+// How many devices each side of this project has ({av: n, lc: n}), or null when
+// that isn't known (an older Worker, or offline with no saved copy). A side with
+// nothing uploaded gets no "Switch" link - there would be nothing to switch to.
+let currentSideCounts = null;
 let DEVICES = [];
 let LOCATIONS = [];
 let SERVER_LOCATIONS = [];
@@ -548,6 +552,7 @@ function renderContent(){
   else if(view === 'failed-checks') renderFailedChecks();
   else renderPunchList();
   renderStats();
+  persistDraft();
 }
 
 // ---------- sync layer (Cloudflare Worker -> Turso) ----------
@@ -1461,6 +1466,7 @@ document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id === 'newLocationName' && addingLocation){ locationDraftText = e.target.value; }
   if(e.target.id === 'locationPunchDesc' && addingLocationPunchFor){ locationPunchDraft = e.target.value; }
   if(e.target.id === 'editNoteText' && editingNotesId){ editNoteText[editingNotesId] = e.target.value; }
+  if(e.target.id === 'punchDesc' || e.target.id === 'locationPunchDesc') persistDraft();
   if(e.target.id && e.target.id.indexOf('newDevice_') === 0 && addingDeviceFor){
     deviceDraft[e.target.id.slice('newDevice_'.length)] = e.target.value;
   }
@@ -1510,15 +1516,137 @@ document.querySelectorAll('.stat.clickable').forEach(function(el){
   });
 });
 
-//Warns the user prior to a page unload if the add punch item box is open
+// ---------- unsent punch drafts ----------
+// A half-written punch item is protected two ways, because the browser's
+// "leave this page?" warning (beforeunload) can't be relied on everywhere:
+// iOS Safari never shows it, and nothing at all fires when a tab or the app is
+// swiped away. So the draft is ALSO saved on this device as it is typed (and
+// again whenever the page is hidden - the one event iOS does fire) and put
+// back the next time this project + side is opened. The app's own ways out
+// (Switch side, All Projects, Log out) ask with a normal confirm(), which does
+// work on iOS. The browser warning stays for desktop.
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;   // an older draft is dropped rather than resurfacing days later
+let skipUnloadWarning = false;                   // set once a leave has been confirmed, so the browser doesn't ask a second time
+let draftSavingOff = false;                      // set at log out, so nothing writes a draft back on the way out
+let lastDraftSig = null;
+
+function draftKey(){ return 'pd_draft_' + currentProject + '_' + DEVICE_TYPE; }
+
+// Belt and braces: pick up text the input handler may not have seen yet.
+function pullDraftTextFromScreen(){
+  const a = document.getElementById('punchDesc');
+  if(a && openPunchFormFor) punchDraftText[openPunchFormFor] = a.value;
+  const b = document.getElementById('locationPunchDesc');
+  if(b && addingLocationPunchFor) locationPunchDraft = b.value;
+}
+
+// What counts as unsent: a punch box that is open AND has text in it.
+function currentDraft(){
+  const dev = (openPunchFormFor && (punchDraftText[openPunchFormFor] || '').trim())
+    ? {deviceId: openPunchFormFor, text: punchDraftText[openPunchFormFor]} : null;
+  const loc = (addingLocationPunchFor && (locationPunchDraft || '').trim())
+    ? {scope: addingLocationPunchFor, text: locationPunchDraft} : null;
+  return (dev || loc) ? {dev: dev, loc: loc} : null;
+}
+
+function hasUnsentDraft(){
+  pullDraftTextFromScreen();
+  return !!currentDraft();
+}
+
+function persistDraft(){
+  if(draftSavingOff || !currentProject) return;
+  try{
+    pullDraftTextFromScreen();
+    const d = currentDraft();
+    if(!d){
+      if(lastDraftSig !== null){ localStorage.removeItem(draftKey()); lastDraftSig = null; }   // submitted or cancelled
+      return;
+    }
+    const body = {dev: d.dev, loc: d.loc, severity: pendingSeverity, ownership: pendingOwnership};
+    const sig = JSON.stringify(body);
+    if(sig === lastDraftSig) return;
+    localStorage.setItem(draftKey(), JSON.stringify(Object.assign({v: 1, email: callerEmail().toLowerCase(), savedAt: Date.now()}, body)));
+    lastDraftSig = sig;
+  }catch(e){ /* storage unavailable (private mode, full): the draft just isn't kept */ }
+}
+
+// Logging out must not leave someone's half-written punch item on a shared phone.
+function discardAllDrafts(){
+  draftSavingOff = true;
+  try{
+    for(let i = localStorage.length - 1; i >= 0; i--){
+      const k = localStorage.key(i);
+      if(k && k.indexOf('pd_draft_') === 0) localStorage.removeItem(k);
+    }
+  }catch(e){}
+}
+
+function showToast(msg){
+  const el = document.createElement('div');
+  el.setAttribute('role', 'status');
+  el.style.cssText = 'position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;font-weight:600;box-shadow:var(--shadow);z-index:100;text-align:center;text-wrap:balance;';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 5000);
+}
+
+// Put a saved draft back: reopen the right form, with the text, severity and
+// ownership it had. Only for the same person, only if it's recent, and only if
+// the device / location it was for still exists - otherwise it's dropped.
+function restoreDraft(){
+  const discard = function(){ try{ localStorage.removeItem(draftKey()); }catch(e){} };
+  let d = null;
+  try{ const raw = localStorage.getItem(draftKey()); d = raw ? JSON.parse(raw) : null; }catch(e){ d = null; }
+  if(!d) return;
+  if(d.v !== 1 || !d.savedAt || (Date.now() - d.savedAt) > DRAFT_MAX_AGE_MS || (d.email || '') !== callerEmail().toLowerCase()){ discard(); return; }
+
+  const dev = (d.dev && d.dev.text && DEVICE_BY_ID[d.dev.deviceId]) ? DEVICE_BY_ID[d.dev.deviceId] : null;
+  const scopeOk = d.loc && d.loc.text && (d.loc.scope === PROJECT_WIDE_SCOPE || LOCATIONS.some(function(l){ return l.name === d.loc.scope; }));
+  if(!dev && !scopeOk){ discard(); return; }
+
+  if(dev){ openPunchFormFor = dev.id; punchDraftText[dev.id] = d.dev.text; }
+  if(scopeOk){ addingLocationPunchFor = d.loc.scope; locationPunchDraft = d.loc.text; }
+  if(['minor', 'major', 'critical'].indexOf(d.severity) !== -1) pendingSeverity = d.severity;
+  if(['Field Tech/Install', 'Programming', 'Configuration'].indexOf(d.ownership) !== -1) pendingOwnership = d.ownership;
+
+  // Show where the draft lives (a device draft wins if there are two).
+  searchQuery = '';
+  const searchBox = document.getElementById('searchInput'); if(searchBox) searchBox.value = '';
+  if(dev){ currentLocation = dev.location; view = 'location-detail'; activateTab('locations'); }
+  else if(d.loc.scope === PROJECT_WIDE_SCOPE){ view = 'punch'; activateTab('punch'); }
+  else { currentLocation = d.loc.scope; view = 'location-detail'; activateTab('locations'); }
+  renderContent();
+
+  const where = dev ? 'for ' + (dev.name || dev.id) : (d.loc.scope === PROJECT_WIDE_SCOPE ? 'for the whole project' : 'for ' + d.loc.scope);
+  showToast(dev && scopeOk ? 'Restored 2 unsent punch items you were writing' : 'Restored your unsent punch item ' + where);
+  setTimeout(function(){ const ta = document.getElementById(dev ? 'punchDesc' : 'locationPunchDesc'); if(ta && ta.scrollIntoView) ta.scrollIntoView({block: 'center'}); }, 0);
+}
+
+// The browser's own warning - desktop only in practice. Skipped once a leave
+// has been confirmed through the app's own dialog, so nobody is asked twice.
 window.addEventListener('beforeunload', function(e){
-  const hasDeviceDraft = openPunchFormFor && (punchDraftText[openPunchFormFor] || '').trim();
-  const hasLocationDraft = addingLocationPunchFor && (locationPunchDraft || '').trim();
-  if(hasDeviceDraft || hasLocationDraft){
+  if(skipUnloadWarning) return;
+  if(hasUnsentDraft()){
     e.preventDefault();
     e.returnValue = '';
   }
 });
+
+// The reliable moments on a phone: the page going to the background, or away.
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden') persistDraft(); });
+window.addEventListener('pagehide', persistDraft);
+
+// For leaving through the app's own buttons. confirm() works on iOS.
+function confirmLeaveWithDraft(discarding){
+  if(!hasUnsentDraft()) return true;
+  const msg = discarding
+    ? 'You have an unsent punch item, and logging out will discard it. Log out anyway?'
+    : 'You have an unsent punch item. It stays saved on this device and will be here when you come back to this project. Leave now?';
+  if(!confirm(msg)) return false;
+  skipUnloadWarning = true;
+  return true;
+}
 
 //Tries to send an update notification when page is closed
 //Falls back to a single daily update if this fails
@@ -1567,8 +1695,10 @@ async function boot(){
     SERVER_LOCATIONS = data.locations || [];
     currentProjectMeta = data.project || {name: projectId, shortName: projectId};
     currentAccess = data.access || currentAccess;
+    currentSideCounts = data.deviceCounts || currentSideCounts;
     updateSwitchAvailability();
-    saveDeviceCache(currentProjectMeta, DEVICES, SERVER_LOCATIONS);
+    // the counts ride along in the saved copy, so the header is right offline too
+    saveDeviceCache(Object.assign({}, currentProjectMeta, {deviceCounts: currentSideCounts}), DEVICES, SERVER_LOCATIONS);
     syncEnabled = true;
     loaded = true;
   }catch(e){
@@ -1578,6 +1708,8 @@ async function boot(){
       DEVICES = cached.devices;
       SERVER_LOCATIONS = cached.locations || [];
       currentProjectMeta = cached.meta || {name: projectId, shortName: projectId};
+      currentSideCounts = (cached.meta && cached.meta.deviceCounts) || null;
+      updateSwitchAvailability();
       syncEnabled = false;
       loaded = true;
     }
@@ -1599,6 +1731,7 @@ async function boot(){
 
   loadCache();
   renderContent();
+  restoreDraft();
 
   // Real-time push (onSnapshot) isn't available with this backend, so instead
   // we do an immediate sync on load, then poll on an interval. Every write
@@ -1618,8 +1751,14 @@ async function boot(){
 // this project - otherwise it would just open a side they weren't given.
 function updateSwitchAvailability(){
   const other = DEVICE_TYPE === 'lc' ? 'av' : 'lc';
-  const link = document.getElementById('switchSideLink');
-  if(link) link.hidden = currentAccess[other] === false;
+  const noAccess = currentAccess[other] === false;
+  const nothingThere = !!currentSideCounts && currentSideCounts[other] === 0;
+  const hide = noAccess || nothingThere;
+  // the link and the "·" between it and Log out go together
+  ['switchSideLink', 'switchSideSep'].forEach(function(id){
+    const el = document.getElementById(id);
+    if(el) el.hidden = hide;
+  });
 }
 
 (function setupSessionControls(){
@@ -1629,6 +1768,7 @@ function updateSwitchAvailability(){
     switchLink.textContent = 'Switch to ' + other.toUpperCase();
     switchLink.addEventListener('click', function(e){
       e.preventDefault();
+      if(!confirmLeaveWithDraft(false)) return;
       try{ sessionStorage.setItem('pd_device_type', other); }catch(err){}
       window.location.href = 'index.html?project=' + encodeURIComponent(currentProject || '') + '&type=' + other;
     });
@@ -1637,7 +1777,10 @@ function updateSwitchAvailability(){
   if(logoutLink){
     logoutLink.addEventListener('click', function(e){
       e.preventDefault();
-      if(!confirm('Are you sure you want to log out?')) return;
+      if(hasUnsentDraft()){
+        if(!confirmLeaveWithDraft(true)) return;
+      }else if(!confirm('Are you sure you want to log out?')) return;
+      discardAllDrafts();
       try{
         sessionStorage.removeItem('pd_user_email');
         sessionStorage.removeItem('pd_tech_name');
@@ -1647,6 +1790,9 @@ function updateSwitchAvailability(){
       window.location.replace('login.html');
     });
   }
+  document.querySelectorAll('a[href="projects.html"]').forEach(function(a){
+    a.addEventListener('click', function(e){ if(!confirmLeaveWithDraft(false)) e.preventDefault(); });
+  });
 })();
 
 boot();
