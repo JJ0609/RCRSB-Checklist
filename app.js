@@ -1186,7 +1186,7 @@ async function exportDeviceReport(){
       idCell.value = d.id;
       idCell.fill = xlFill(band);
       idCell.font = {color:{argb: XL_COLORS.GRAVEL_TXT}, italic:true};
-      const plainVals = [d.location, d.name, d.model, d.cresnetId, d.dinRail, d.controller, d.ipid, d.ip, d.connection];
+      const plainVals = [d.location, d.name, d.model, d.cresnetId, d.dinRail, d.controller, d.ip, d.ipid, d.connection];
       plainVals.forEach(function(v, i){
         const cell = row.getCell(i+2);
         cell.value = v || '';
