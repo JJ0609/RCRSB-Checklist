@@ -1,3 +1,13 @@
 {
-    "name": "Power Design Commissioning Site"
+    "name": "Power Design Commissioning Site",
+    "short_name": "Commissioning Site",
+    "icons": [
+        {
+            "src": "power-design-logo-black.png",
+            "type": "image/png",
+            "sizes": "512x512"
+        }
+    ],
+    "start_url": "https://jj0609.github.io/RCRSB-Checklist/login.html",
+    "display": "standalone"
 }
