@@ -34,6 +34,8 @@ function showEmailStep(deviceType){
     document.getElementById('chosenModeLabel').textContent = deviceType === 'lc' ? 'LC Projects' : 'AV Projects';
     document.getElementById('modeChoice').hidden = true;
     document.getElementById('emailStep').hidden = false;
+    const remembered = document.getElementById('emailInput');
+    try{ if(!remembered.value) remembered.value = localStorage.getItem('pd_last_email') || ''; }catch(e){}
     document.getElementById('emailInput').focus();
 }
 
@@ -57,6 +59,7 @@ function submitLogin(){
         sessionStorage.setItem('pd_user_email', email);
         sessionStorage.setItem('pd_tech_name', email);
         sessionStorage.setItem('pd_device_type', chosenDeviceType);
+        localStorage.setItem('pd_last_email', email);
     }catch(e){}
 
     const params = new URLSearchParams(window.location.search);

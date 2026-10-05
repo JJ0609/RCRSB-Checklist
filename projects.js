@@ -176,26 +176,52 @@ function render(){
   content.innerHTML = html;
 }
 
+//The list is kept on the device after every successful load, so it can still be shown
+//with no connection (for the same emails, whats visible depends on who is asking).
+function listCacheKey(){ return 'pd_projects_cache' + DEVICE_TYPE; }
+function saveListCache(email){
+  try{ localStorage.setItem(listCacheKey(), JSON.stringify({email: email, savedAt: new Date().toISOString(), projects: allProjects})); }catch(e){}
+}
+function readListCache(email){
+  try{
+    const c = JSON.parse(localStorage.getItem(listCacheKey()) || 'null');
+    return ( c && c.email ===email && Array.isArray(c.projects)) ? c : null;
+  }catch(e){ return null; }
+}
+
 async function loadProjects(){
   const content = document.getElementById('content');
   content.innerHTML = '<div class="empty" style="padding:60px 20px;">Loading projects&hellip;</div>';
+  const email = (sessionStorage.getItem('pd_user_email') || '').trim();
+  let fromCache = null, loadedOk = false;
   try{
-    const email = (sessionStorage.getItem('pd_user_email') || '').trim();
     const url = SYNC_API_BASE.replace(/\/$/, '') + '/api/projects?email=' + encodeURIComponent(email) + '&deviceType=' + DEVICE_TYPE;
-    const res = await fetch(url);
+//On a weak connection, give up after a few seconds and use the saved list rather than waiting.
+    const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = ctl ? setTimeout(function(){ ctl.abort(); }, 8000) : null;
+    let res;
+    try{ res = await fetch(url, ctl ? {signal: ctl.signal} : undefined); } finally { if(timer) clearTimeout(timer); }
     if(!res.ok) throw new Error('Request failed (' + res.status + ')');
     const data = await res.json();
     allProjects = data.projects || [];
-    renderRegionFilter();
-    renderStatusFilterButtons();
-    render();
+    loadedOk = true;
+    saveListCache(email);
   }catch(e){
     console.error(e);
+    fromCache = readListCache(email);
+    if(fromCache) allProjects = fromCache.projects;
+  }
+  renderListNote(fromCache);
+  if(!loadedOk && !fromCache){
     content.innerHTML = '<div class="empty" style="padding:60px 20px;">'
       + '<div style="font-weight:800;font-size:16px;margin-bottom:6px;color:var(--ink);">Couldn\'t load the project list</div>'
       + '<div>Check your connection and try reloading the page.</div>'
       + '</div>';
+      return;
   }
+  renderRegionFilter();
+  renderStatusFilterButtons();
+  render();
 }
 
 document.getElementById('searchInput').addEventListener('input', function(e){
@@ -241,3 +267,89 @@ document.getElementById('searchInput').addEventListener('input', function(e){
 })();
 
 loadProjects();
+
+// ----------- Working Offline ----------- 
+// Three things sit between the header and the list:
+//   a note when the list on screen is the copy saved on this device
+//   a banner for changes made offline that are still waiting to be sent
+//   a button that saves every project on this device, for jobsites with no signal
+function bar(id, className){
+  let el = document.getElementById(id);
+  if(!el){
+    const content = document.getElementById('content');
+    el = document.createElement('div');
+    el.id = id;
+    el.className = className || '';
+    el.style.margin = '10px 16px 0';
+    content.parentNode.insertBefore(el, content);
+  }
+  return el;
+}
+function when(iso){
+  try{ return new Date(iso).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'}); }catch(e){ return ''; }
+}
+
+function renderListNote(fromCache){
+  const el = bar('listNote', 'offline-banner');
+  el.hidden = !fromCache;
+  el.innerHTML = fromCache ? '<span class="dot"></span> Offline - showing the project list saved on this device (' + esc(when(fromCache.savedAt)) + ').' : '';
+}
+
+let syncingPending = false;
+function renderPendingBanner(state, detail){
+  const el = bar('pendingBanner', 'offline-banner');
+  const sum = window.PDOffline ? PDOffline.pendingSummary() : {list: [], total: 0};
+  let msg = '';
+  if(state === 'synced') msg = detail + ' change' + (detail === 1 ? '' : 's') + ' made offline ' + (detail === 1 ? 'was' : 'were') + ' sent to the server.';
+  else if(sum.total && state === 'syncing') msg = 'Sending ' + sum.total + ' change' + (sum.total === 1 ? '' : 's') + ' made offline...';
+  else if(sum.total) msg = sum.total + ' change' + (sum.total === 1 ? '' : 's') + ' made offline ' + (sum.total === 1 ? 'is' : 'are') + ' saved on this device, waiting to sync (' + sum.list.map(function(x){ return x.name; }).join(', ') + '). They send automatically once you are online.';
+  el.hidden = !msg;
+  el.innerHTML = msg ? '<span class="dot"></span> ' + esc(msg) : '';
+}
+
+// Sends changes made offline in any project - including ones that haven't been reopened.
+async function sendPendingChanges(){
+  if(syncingPending || !window.PDOffline || !syncConfigured()) return;
+  if(!PDOffline.pendingSummary().total){ renderPendingBanner(); return; }
+  syncingPending = true;
+  renderPendingBanner('syncing');
+  try{
+    const r = await PDOffline.syncPending();
+    if(!r.remaining && r.sent){ renderPendingBanner('synced', r.sent); setTimeout(function(){ renderPendingBanner(); }, 8000); }
+    else renderPendingBanner();
+  }catch(e){ console.error(e); renderPendingBanner(); }
+  finally{ syncingPending = false; }
+}
+
+function renderSaveBar(state){
+  const el = bar('offlineBar');
+  el.style.cssText = 'margin:10px 16px 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center;';
+  const saved = window.PDOffline ? PDOffline.lastSaved() : null;
+  let text = saved ? 'Saved for offline use: ' + saved.projects + ' project' + (saved.projects === 1 ? '' : 's') + ', ' + when(saved.at) + '.' : 'Not saved yet - tap before heading to a site with no signal.';
+  if(state && state.text) text = state.text;
+  el.innerHTML = '<button class="btn" id="saveOfflineBtn" type="button"' + (state && state.busy ? ' disabled' : '') + '>Save all projects for offline use</button>'
+    + '<span class="field-hint" id="saveOfflineText" style="margin:0;">' + esc(text) + '</span>';
+}
+
+document.addEventListener('click', async function(e){
+  if(!e.target.closest('#saveOfflineBtn')) return;
+  const email = (sessionStorage.getItem('pd_user_email') || '').trim();
+  renderSaveBar({busy: true, text: 'Saving...'});
+  try{
+    const r = await PDOffline.saveAll(email, function(done, total, job){
+      renderSaveBar({busy: true, text: job ? 'Saving ' + (done + 1) + ' of ' + total + ': ' + job.name + ' (' + job.side.toUpperCase() + ')...' : 'Finishing...'});
+    });
+    if(r.failed.length) renderSaveBar({text: 'Saved ' + r.saved + ' of ' + r.total + '. Could not save: ' + r.failed.map(function(f){ return f.job.name + ' ' + f.job.side.toUpperCase() + ' (' + f.error + ')'; }).join(', ') + '.'});
+    else renderSaveBar();
+  }catch(err){
+    console.error(err);
+    renderSaveBar({text: 'No connection - connect to the internet and try again.'});
+  }
+});
+
+renderSaveBar();
+renderPendingBanner();
+sendPendingChanges();
+window.addEventListener('online', sendPendingChanges);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') sendPendingChanges(); });
+setInterval(sendPendingChanges, 15000);

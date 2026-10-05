@@ -108,6 +108,7 @@ function loadCache(){
       const parsed = JSON.parse(raw);
       checklist = parsed.checklist || {};
       punches = parsed.punches || [];
+      punches.forEach(function(p){ delete p.syncError; delete p.syncedClock; });
     }
   }catch(e){}
 }
@@ -180,6 +181,7 @@ function renderStats(){
   document.getElementById('statBar').style.width = (s.total? (100*s.tested/s.total):0) + '%';
   document.getElementById('statOpen').textContent = s.open;
   document.getElementById('statFail').textContent = s.failChecks;
+  renderSyncStatus();
 }
 
 function matchesSearch(text){
@@ -190,9 +192,6 @@ function matchesSearch(text){
 function renderLocations(){
   const q = searchQuery.trim();
   let html = '';
-  if(!syncEnabled){
-    html += '<div class="offline-banner"><span class="dot"></span> Working solo on this device &mdash; changes will sync to the team once a connection is available.</div>';
-  }
   // If searching, also allow jumping straight to a matching device
   let locs = LOCATIONS;
   if(q){
@@ -412,14 +411,14 @@ function deviceCardHtml(d, showLocation){
     + '</div></div>';
   html += '<div class="device-data mono">';
   if(d.cresnetId) html += '<span>Cresnet ID <b>' + esc(d.cresnetId) + '</b></span>';
-  if(d.controller) html += '<span>Processor <b>' + esc(d.controller) + '</b></span>';
+  if(d.controller) html += '<span>Ctrl <b>' + esc(d.controller) + '</b></span>';
   // On an LC device the IP / IP ID belong to its controller, not to the device itself
-  if(d.ip) html += '<span>' + (d.controller ? 'Processor IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
-  if(d.ipid) html += '<span>' + (d.controller ? 'Processor ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
+  if(d.ip) html += '<span>' + (d.controller ? 'Ctrl IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
+  if(d.ipid) html += '<span>' + (d.controller ? 'Ctrl ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
   if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(d.dinRail) html += '<span>DIN <b>' + esc(d.dinRail) + '</b></span>';
-  if(d.connection) html += '<span>Connection <b>' + esc(d.connection) + '</b></span>';
+  if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
   if(ports) html += '<span>' + esc(ports) + '</span>';
   html += '</div>';
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
@@ -581,7 +580,9 @@ async function apiCall(path, options){
     }, opts, signal ? {signal: signal} : {}));
     if(!res.ok){
       const text = await res.text().catch(function(){ return ''; });
-      throw new Error('API ' + path + ' failed (' + res.status + '): ' + text);
+      const err = new Error('API ' + path + ' failed (' + res.status + '): ' + text);
+      err.status = res.status;
+      throw err;
     }
     return await res.json();
   }finally{
@@ -590,7 +591,7 @@ async function apiCall(path, options){
 }
 
 async function fetchRemoteState(){
-  return apiCall('/api/state?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE, {method: 'GET'});
+  return apiCall('/api/state?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE, {method: 'GET', timeoutMs: 10000});
 }
 
 function callerEmail(){
@@ -598,7 +599,7 @@ function callerEmail(){
 }
 
 async function fetchDevicesAndMeta(){
-  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE + '&email=' + encodeURIComponent(callerEmail()), {method: 'GET'});
+  return apiCall('/api/devices?project=' + encodeURIComponent(currentProject) + '&deviceType=' + DEVICE_TYPE + '&email=' + encodeURIComponent(callerEmail()), {method: 'GET', timeoutMs: 8000});
 }
 
 function deviceCacheKey(){
@@ -617,13 +618,13 @@ function loadDeviceCache(){
   }catch(e){ return null; }
 }
 
-async function pushCheck(deviceId, key, value){
+async function pushCheck(deviceId, key, value, by){
   return apiCall('/api/check', {
     timeoutMs: 12000,
     method: 'POST',
     body: JSON.stringify({
       project: currentProject, deviceId: deviceId, key: key, value: value,
-      updatedBy: techName || 'Unnamed tech'
+      updatedBy: by || techName || 'Unnamed tech'
     })
   });
 }
@@ -635,6 +636,7 @@ async function pushPunch(item){
       project: currentProject, deviceId: item.deviceId, deviceName: item.deviceName,
       location: item.location, description: item.description, severity: item.severity, ownership: item.ownership,
       reportedBy: item.reportedBy,
+      clientId: item.clientId || String(item.id).replace(/^local-/, ''),   // lets the server ignore a repeat of the same request
       deviceType: item.deviceType || DEVICE_TYPE
     })
   });
@@ -666,6 +668,14 @@ async function pushToggleResolve(punchId, actorName){
   return apiCall('/api/punch/toggle', {
     method: 'POST',
     body: JSON.stringify({project: currentProject, id: punchId, actorName: actorName})
+  });
+}
+
+// Sets the status (rather than flipping it), so sending the same request twice is harmless.
+async function pushSetPunchStatus(punchId, status, actorName){
+  return apiCall('/api/punch/toggle', {
+    method: 'POST',
+    body: JSON.stringify({project: currentProject, id: punchId, status: status, actorName: actorName})
   });
 }
 
@@ -723,14 +733,17 @@ let checkClock = 0;           // ticks whenever a write is confirmed or a poll s
 
 function queueCheckWrite(deviceId, key, value){
   const k = deviceId + '|' + key;
+  const by = techName || 'Unnamed tech';
   let e = localCheckEdits[k];
   if(!e){
-    e = localCheckEdits[k] = {deviceId: deviceId, key: key, value: value, status: 'idle', sentValue: undefined, settledAt: null};
+    e = localCheckEdits[k] = {deviceId: deviceId, key: key, value: value, by: by, status: 'idle', sentValue: undefined, settledAt: null};
   }else{
     e.value = value;
+    e.by = by;
     e.settledAt = null;
     if(e.status === 'settled') e.status = 'idle';
   }
+  persistPendingChecks();
   sendCheckEdit(e);
 }
 
@@ -739,7 +752,7 @@ function sendCheckEdit(e){
   e.status = 'sending';
   const sent = e.value;
   e.sentValue = sent;
-  pushCheck(e.deviceId, e.key, sent).then(function(){
+  pushCheck(e.deviceId, e.key, sent, e.by).then(function(){
     e.settledAt = ++checkClock;
     if(e.value !== sent){               // tapped again meanwhile - send the latest
       e.status = 'idle';
@@ -747,9 +760,17 @@ function sendCheckEdit(e){
     }else{
       e.status = 'settled';
     }
+    persistPendingChecks();
+    renderSyncStatus();
   }).catch(function(err){
     console.error(err);
-    e.status = 'failed';                // stays protected; retried on the next poll
+    if(isPermanentFailure(err)){
+      delete localCheckEdits[e.deviceId + '|' + e.key];   // the server refused it; retrying can't help, and the next poll shows the real value
+    }else{
+      e.status = 'failed';              // stays protected AND saved on the device; retried on the next poll
+    }
+    persistPendingChecks();
+    renderSyncStatus();
   });
 }
 
@@ -791,7 +812,7 @@ function stateSignature(cl, pu){
 
 async function syncFromRemote(){
   if(!syncConfigured()) return;
-  flushPendingChecks();
+  flushAllPending();
   const pollStartedAt = ++checkClock;
   try{
     const remote = await fetchRemoteState();
@@ -800,8 +821,16 @@ async function syncFromRemote(){
     checklist = mergeRemoteChecklist(remote.checklist || {}, pollStartedAt);
     const remoteIds = {};
     (remote.punches || []).forEach(function(p){ remoteIds[p.id] = true; });
-    const stillLocal = punches.filter(function(p){ return String(p.id).indexOf('local-') === 0 && !remoteIds[p.id]; });
+    // keep punch items that haven't reached the server yet, and ones that did just now (this poll may predate them)
+    const stillLocal = punches.filter(function(p){
+      return !remoteIds[p.id] && (String(p.id).indexOf('local-') === 0 || (p.syncedClock && p.syncedClock > pollStartedAt));
+    });
     punches = (remote.punches || []).concat(stillLocal);
+    Object.keys(pendingOps).forEach(function(k){
+      const o = pendingOps[k];
+      if(o.status === 'settled' && o.settledAt < pollStartedAt) delete pendingOps[k];   // this poll began after it landed: the server has it
+    });
+    applyPendingOps();
     syncEnabled = true;
     saveCache();
     // Only rebuild the screen when something visible actually changed (or the
@@ -836,7 +865,7 @@ async function submitAddLocation(){
     rebuildDeviceIndexes();
     renderContent();
   }catch(e){
-    alert('Could not add location: ' + e.message);
+    alert(failureText('add location', e));
     if(btn){ btn.disabled = false; btn.textContent = 'Add location'; }
   }
 }
@@ -866,7 +895,7 @@ async function submitAddDevice(){
     rebuildDeviceIndexes();
     renderContent();
   }catch(e){
-    alert('Could not add device: ' + e.message);
+    alert(failureText('add device', e));
     if(btn){ btn.disabled = false; btn.textContent = 'Add device'; }
   }
 }
@@ -876,19 +905,17 @@ function submitNoteEdit(deviceId){
   if(!dev) return;
   const ta = document.getElementById('editNoteText');
   const note = (editNoteText[deviceId] !== undefined ? editNoteText[deviceId] : (ta ? ta.value : '')).trim();
-  const btn = document.getElementById('saveEditNote');
-  if(btn){ btn.disabled = true; btn.textContent = 'Saving...'; }
-  pushEditNote(deviceId, note).then(function(result){
-    dev.note = note;
-    dev.noteUpdatedBy = result.noteUpdatedBy;
-    dev.noteUpdatedAt = result.noteUpdatedAt;
-    editingNotesId = null;
-    delete editNoteText[deviceId];
-    renderContent();
-  }).catch(function(e){
-    alert('Could not save note: ' + e.message);
-    if(btn){ btn.disabled = false; btn.textContent = 'Save note'; }
-  });
+  const by = techName || 'Unnamed tech';
+  const at = new Date().toISOString();
+  // Applied here straight away and saved on the device; the server gets it when it can.
+  dev.note = note;
+  dev.noteUpdatedBy = by;
+  dev.noteUpdatedAt = at;
+  editingNotesId = null;
+  delete editNoteText[deviceId];
+  saveDeviceCache(Object.assign({}, currentProjectMeta, {deviceCounts: currentSideCounts}), DEVICES, SERVER_LOCATIONS);
+  renderContent();
+  queueOp('note', deviceId, {note: note, by: by, at: at});
 }
 
 function persistChecklist(deviceId){
@@ -909,9 +936,10 @@ function submitPunch(deviceId){
   const dev = DEVICE_BY_ID[deviceId];
   const desc = (punchDraftText[deviceId] || document.getElementById('punchDesc').value || '').trim();
   if(!desc) return;
-  const tempId = 'local-' + Date.now();
+  const cid = newClientId();
+  const tempId = 'local-' + cid;
   const item = {
-    id: tempId, deviceId: deviceId, deviceName: dev.name, location: dev.location, deviceType: DEVICE_TYPE,
+    id: tempId, clientId: cid, deviceId: deviceId, deviceName: dev.name, location: dev.location, deviceType: DEVICE_TYPE,
     description: desc, severity: pendingSeverity, ownership: pendingOwnership, status: 'open',
     reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
   };
@@ -920,20 +948,16 @@ function submitPunch(deviceId){
   delete punchDraftText[deviceId];
   saveCache();
   renderContent();
-  if(syncConfigured()){
-    pushPunch(item).then(function(res){
-      item.id = res.id;
-      saveCache();
-    }).catch(function(e){ console.error(e); /* stays local-only; flushPendingPunches retries */ });
-  }
+  sendPunch(item);
 }
 function submitLocationPunch(){
   const desc = (locationPunchDraft || (document.getElementById('locationPunchDesc') || {}).value || '').trim();
   if(!desc) return;
-  const tempId = 'local-' + Date.now();
+  const cid = newClientId();
+  const tempId = 'local-' + cid;
   const isProjectWide = addingLocationPunchFor === PROJECT_WIDE_SCOPE;
   const item = {
-    id: tempId, deviceId: null, deviceName: '', location: isProjectWide ? '' : addingLocationPunchFor, deviceType: DEVICE_TYPE,
+    id: tempId, clientId: cid, deviceId: null, deviceName: '', location: isProjectWide ? '' : addingLocationPunchFor, deviceType: DEVICE_TYPE,
     description: desc, severity: pendingSeverity, ownership: pendingOwnership, status: 'open',
     reportedBy: techName || 'Unnamed tech', createdAt: new Date().toISOString()
   };
@@ -942,12 +966,7 @@ function submitLocationPunch(){
   locationPunchDraft = '';
   saveCache();
   renderContent();
-  if(syncConfigured()){
-    pushPunch(item).then(function(res){
-      item.id = res.id;
-      saveCache();
-    }).catch(function(e){ console.error(e); /* stays local-only; flushPendingPunches retries */ });
-  }
+  sendPunch(item);
 }
 function toggleResolve(punchId){
   const p = punches.find(function(x){ return x.id === punchId; });
@@ -957,9 +976,9 @@ function toggleResolve(punchId){
   else { delete p.resolvedBy; delete p.resolvedAt; }
   saveCache();
   renderContent();
-  if(syncConfigured() && String(p.id).indexOf('local-') !== 0){
-    pushToggleResolve(p.id, techName || 'Unnamed tech').catch(function(e){ console.error(e); });
-  }
+  if(String(p.id).indexOf('local-') !== 0){
+    queueOp('resolve', p.id, {status: p.status, by: techName || 'Unnamed tech', at: p.resolvedAt || null});
+  }   // (a punch item that hasn't reached the server yet carries its status up with it - see sendPunch)
 }
 
 function submitPunchEdit(punchId){
@@ -974,8 +993,8 @@ function submitPunchEdit(punchId){
   delete editDraftText[punchId];
   saveCache();
   renderContent();
-  if(syncConfigured() && String(p.id).indexOf('local-') !== 0){
-    pushEditPunch(p.id, desc, p.severity, p.ownership, techName || 'Unnamed tech').catch(function(e){ console.error(e); /* will reconcile on next poll */ });
+  if(String(p.id).indexOf('local-') !== 0){
+    queueOp('edit', p.id, {description: desc, severity: p.severity, ownership: p.ownership, by: techName || 'Unnamed tech'});
   }
 }
 
@@ -1325,17 +1344,235 @@ async function exportDeviceReport(){
 }
 document.getElementById('exportReportBtn').addEventListener('click', exportDeviceReport);
 
-function flushPendingPunches(){
-  if(!syncConfigured()) return;
-  punches.filter(function(p){ return String(p.id).indexOf('local-') === 0; }).forEach(function(item){
-    pushPunch(item).then(function(res){
-      item.id = res.id;
-      saveCache();
-      if(isComposingPunch()) renderStats(); else renderContent();
-    }).catch(function(){ /* still offline-ish, will retry on next interval */ });
+// ---------- changes waiting to reach the server ----------
+// Every change is applied on screen and saved ON THE DEVICE first, and only forgotten
+// once the server has confirmed it - so closing the app, losing the signal, or the
+// iPad restarting never loses work. They are sent whenever the app is open and can
+// reach the server (iOS has no background sync, so a closed app can't send). Each
+// kind of change is safe to send twice, which is what makes retrying safe:
+//   Pass/Fail taps, resolve, edit punch, edit note: they SET a value
+//   a new punch item: carries its own id, which the server uses to ignore a repeat
+function newClientId(){
+  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+}
+
+// The server understood and refused (unknown id, invalid value...): sending it again can never help.
+// Anything else - no connection, a timeout, a server hiccup - is worth retrying.
+function isPermanentFailure(e){
+  return !!(e && e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429);
+}
+
+function failureText(what, e){
+  if(e && e.status) return 'Could not ' + what + ': ' + e.message;
+  return 'No connection - this needs the server (' + what + '). What you typed is still on screen; try again when you are back online.';
+}
+
+function pendingKey(kind){ return 'pd_pending_' + kind + '_' + currentProject + '_' + DEVICE_TYPE; }
+
+function persistPendingChecks(){
+  try{
+    const out = {};
+    Object.keys(localCheckEdits).forEach(function(k){
+      const e = localCheckEdits[k];
+      if(e.status !== 'settled') out[k] = {deviceId: e.deviceId, key: e.key, value: e.value, by: e.by};
+    });
+    if(Object.keys(out).length) localStorage.setItem(pendingKey('checks'), JSON.stringify(out));
+    else localStorage.removeItem(pendingKey('checks'));
+  }catch(e){}
+}
+
+function restorePendingChecks(){
+  try{
+    const raw = localStorage.getItem(pendingKey('checks'));
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    Object.keys(saved).forEach(function(k){
+      const s = saved[k];
+      if(!s || !s.deviceId || !s.key) return;
+      const value = s.value === undefined ? null : s.value;
+      localCheckEdits[k] = {deviceId: s.deviceId, key: s.key, value: value, by: s.by, status: 'idle', sentValue: undefined, settledAt: null};
+      const cur = Object.assign({power: null, network: null, function: null}, checklist[s.deviceId]);
+      cur[s.key] = value;
+      checklist[s.deviceId] = cur;
+    });
+  }catch(e){}
+}
+
+// Resolve / edit punch / edit note. One waiting change per item and kind (the latest wins).
+const pendingOps = {};   // 'kind|id' -> {kind, id, data, status, settledAt}
+
+function persistPendingOps(){
+  try{
+    const out = {};
+    Object.keys(pendingOps).forEach(function(k){
+      const e = pendingOps[k];
+      if(e.status !== 'settled') out[k] = {kind: e.kind, id: e.id, data: e.data};
+    });
+    if(Object.keys(out).length) localStorage.setItem(pendingKey('ops'), JSON.stringify(out));
+    else localStorage.removeItem(pendingKey('ops'));
+  }catch(e){}
+}
+
+function restorePendingOps(){
+  try{
+    const raw = localStorage.getItem(pendingKey('ops'));
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    Object.keys(saved).forEach(function(k){
+      const s = saved[k];
+      if(s && s.kind && s.id && s.data) pendingOps[k] = {kind: s.kind, id: s.id, data: s.data, status: 'idle', settledAt: null};
+    });
+  }catch(e){}
+}
+
+function queueOp(kind, id, data){
+  const k = kind + '|' + id;
+  let e = pendingOps[k];
+  if(!e){
+    e = pendingOps[k] = {kind: kind, id: id, data: data, status: 'idle', settledAt: null};
+  }else{
+    e.data = data;
+    e.settledAt = null;
+    if(e.status === 'settled') e.status = 'idle';
+  }
+  persistPendingOps();
+  renderSyncStatus();
+  sendOp(e);
+}
+
+function sendOp(e){
+  if(e.status === 'sending' || !syncConfigured()) return;
+  e.status = 'sending';
+  const sig = JSON.stringify(e.data);
+  let req;
+  if(e.kind === 'resolve') req = pushSetPunchStatus(e.id, e.data.status, e.data.by);
+  else if(e.kind === 'edit') req = pushEditPunch(e.id, e.data.description, e.data.severity, e.data.ownership, e.data.by);
+  else req = pushEditNote(e.id, e.data.note);
+  req.then(function(result){
+    e.settledAt = ++checkClock;
+    if(JSON.stringify(e.data) !== sig){ e.status = 'idle'; sendOp(e); }
+    else{
+      e.status = 'settled';
+      const dev = (e.kind === 'note' && result) ? DEVICE_BY_ID[e.id] : null;
+      if(dev && result.noteUpdatedAt){ dev.noteUpdatedBy = result.noteUpdatedBy; dev.noteUpdatedAt = result.noteUpdatedAt; }
+    }
+    persistPendingOps();
+    renderSyncStatus();
+  }).catch(function(err){
+    console.error(err);
+    if(isPermanentFailure(err)) delete pendingOps[e.kind + '|' + e.id];
+    else e.status = 'failed';
+    persistPendingOps();
+    renderSyncStatus();
   });
 }
+
+function flushPendingOps(){
+  Object.keys(pendingOps).forEach(function(k){
+    const e = pendingOps[k];
+    if(e.status === 'failed' || e.status === 'idle') sendOp(e);
+  });
+}
+
+// What the server says + the changes still waiting to reach it = what's shown.
+function applyPendingOps(){
+  Object.keys(pendingOps).forEach(function(k){
+    const e = pendingOps[k];
+    if(e.kind === 'note'){
+      const d = DEVICE_BY_ID[e.id];
+      if(d){ d.note = e.data.note; d.noteUpdatedBy = e.data.by; d.noteUpdatedAt = e.data.at; }
+      return;
+    }
+    const p = punches.find(function(x){ return x.id === e.id; });
+    if(!p) return;
+    if(e.kind === 'resolve'){
+      p.status = e.data.status;
+      if(p.status === 'resolved'){ p.resolvedBy = e.data.by; p.resolvedAt = e.data.at; }
+      else{ delete p.resolvedBy; delete p.resolvedAt; }
+    }else{
+      p.description = e.data.description;
+      p.severity = e.data.severity;
+      p.ownership = e.data.ownership;
+    }
+  });
+}
+
+// New punch items. Safe to retry (they carry their own id), but never two requests for one item at once.
+const punchesInFlight = {};
+function sendPunch(item){
+  if(!syncConfigured()) return;
+  if(String(item.id).indexOf('local-') !== 0 || punchesInFlight[item.id] || item.syncError) return;
+  const localId = item.id;
+  punchesInFlight[localId] = true;
+  pushPunch(item).then(function(res){
+    item.id = res.id;
+    delete item.clientId;
+    item.syncedClock = ++checkClock;     // lets a poll that started before this keep the item instead of dropping it
+    // resolved while it was still waiting to go up: the status follows it
+    if(item.status === 'resolved') queueOp('resolve', item.id, {status: 'resolved', by: item.resolvedBy || techName || 'Unnamed tech', at: item.resolvedAt || null});
+    saveCache();
+    if(isComposingPunch()) renderStats(); else renderContent();
+  }).catch(function(err){
+    console.error(err);
+    if(isPermanentFailure(err)){ item.syncError = err.message; saveCache(); }   // kept on the device, tried again next launch
+    renderSyncStatus();
+  }).then(function(){ delete punchesInFlight[localId]; });
+}
+
+function flushPendingPunches(){
+  punches.filter(function(p){ return String(p.id).indexOf('local-') === 0; }).forEach(sendPunch);
+}
+
+function flushAllPending(){
+  flushPendingChecks();
+  flushPendingOps();
+  flushPendingPunches();
+}
+
+function pendingCount(){
+  let n = 0;
+  Object.keys(localCheckEdits).forEach(function(k){ if(localCheckEdits[k].status !== 'settled') n++; });
+  Object.keys(pendingOps).forEach(function(k){ if(pendingOps[k].status !== 'settled') n++; });
+  punches.forEach(function(p){ if(String(p.id).indexOf('local-') === 0 && !p.syncError) n++; });
+  return n;
+}
+
+// One line, always in the same place, saying what state the data is in.
+function renderSyncStatus(){
+  let el = document.getElementById('syncStatus');
+  if(!el){
+    const content = document.getElementById('content');
+    if(!content || !content.parentNode) return;
+    el = document.createElement('div');
+    el.id = 'syncStatus';
+    el.className = 'offline-banner';
+    el.setAttribute('role', 'status');
+    el.style.margin = '10px 16px 0';
+    content.parentNode.insertBefore(el, content);
+  }
+  const n = pendingCount();
+  const bad = punches.filter(function(p){ return p.syncError; }).length;
+  const s = function(count, word){ return count + ' ' + word + (count === 1 ? '' : 's'); };
+  let msg = '';
+  if(!syncEnabled){
+    msg = n
+      ? 'Offline - ' + s(n, 'change') + ' saved on this device. They will sync when you are back online.'
+      : 'Offline - working from the copy saved on this device. Changes you make are kept and will sync when you are back online.';
+  }else if(n){
+    msg = 'Syncing ' + s(n, 'change') + '...';
+  }
+  if(bad) msg += (msg ? ' ' : '') + s(bad, 'punch item') + ' could not be saved to the server (kept on this device).';
+  el.hidden = !msg;
+  el.innerHTML = msg ? '<span class="dot"></span> ' + esc(msg) : '';
+}
+
 setInterval(flushPendingPunches, 20000);
+
+// Coming back to the app, or the connection returning, is the moment to send what's waiting.
+window.addEventListener('online', function(){ if(currentProject) syncFromRemote(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible' && currentProject) syncFromRemote(); });
+window.addEventListener('pageshow', function(e){ if(e.persisted && currentProject) syncFromRemote(); });
 
 // ---------- events ----------
 document.getElementById('content').addEventListener('click', function(e){
@@ -1730,6 +1967,9 @@ async function boot(){
   document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' ' + DEVICE_TYPE_LABEL + ' Commissioning';
 
   loadCache();
+  restorePendingChecks();
+  restorePendingOps();
+  applyPendingOps();
   renderContent();
   restoreDraft();
 
@@ -1779,7 +2019,7 @@ function updateSwitchAvailability(){
       e.preventDefault();
       if(hasUnsentDraft()){
         if(!confirmLeaveWithDraft(true)) return;
-      }else if(!confirm('Are you sure you want to log out?')) return;
+      }else if(!confirm(pendingCount() ? 'You have changes that have not synced yet. They stay saved on this device and will sync the next time the app is open with a connection. Log out anyway?' : 'Are you sure you want to log out?')) return;
       discardAllDrafts();
       try{
         sessionStorage.removeItem('pd_user_email');
