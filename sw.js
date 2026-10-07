@@ -80,7 +80,7 @@ function withTimeout(promise, ms){
 
 const OFFLINE_PAGE = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
   '<title>Offline</title><body style="font-family:system-ui,sans-serif;background:#000;color:#eee;padding:40px;line-height:1.5">' +
-  '<h2>You\'re offline</h2><p>This page hasn\'t been saved on this device yet. Go back, or reconnect and try again.</p>';
+  '<h2>You\'re offline</h2><p>This page hasn\'t been saved on this device yet. Go back, or reconnect and try again.</p>'
   + '<div style="margin-top:14px;"><a href="projects.html" style="color:var(--accent);font-weight:700;">&larr; Back to projects</a></div>'
   + '</div>';
 
