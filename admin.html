@@ -160,6 +160,27 @@
           <div id="accessList">Loading&hellip;</div>
         </div>
       </div>
+
+      <div class="admin-card">
+        <h2>Notification Emails</h2>
+        <p class="field-hint" style="margin: 0 0 12px;">Who gets the activity digest (checks updated, punch itemsm new devices etc.). A change here applies to the next digest, there is nothing else to set up.</p>
+        <div id="recipientStatus"></div>
+        <div id="recipientList" style="margin: 6px 0 14px;">Loading&hellip;</div>
+        <div class="field">
+          <label for="recipientInput">Add recipients</label>
+          <div style="display: flex; gap:8px;flex-wrap: wrap;">
+            <input type="text" id="recipientInput" placeholder="name@powerdesigninc.us - several at once: separate with commas" style="flex:1 1 260px;min-width:0;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px;font-size:14px;background:var(--surface);color:var(--ink);">
+            <button class="btn" id="recipientAddBtn" type="button" style="flex:0 0 auto;height:36px;padding:0 20px;font-size:13px;">Add</button>
+          </div>
+        </div>
+        <div id="recipientMsg"></div>
+        <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button class="btn" id="notifyTestBtn" type="button">Send a digest email now</button>
+          <span class="field-hint" style="margin:0;">Sends everything since the last email (or a "nothing new" note) to the list above - the quickest way to check the whole chain works.</span>
+        </div>
+        <div id="notifyTestMsg"></div>
+      </div>
+      </div>
     </div>
   </div>
 </div>

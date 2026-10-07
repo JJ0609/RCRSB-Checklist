@@ -60,6 +60,7 @@ function showPanel(){
   document.getElementById('panel').hidden = false;
   loadProjectList();
   loadAccessList();
+  loadRecipients();
 }
 
 async function tryUnlock(password){
@@ -1295,6 +1296,103 @@ document.getElementById('createBtn').addEventListener('click', async function(){
     showMsg(msgEl, e.message || 'Something went wrong.', 'err');
   }finally{
     btn.disabled = false;
+  }
+});
+
+// ---------- Notification Recipients ----------
+//Who gets the activity digest email. The list lives in the Worker, so adding or removing
+//someone here takes effect on the next digest with nothing else to change.
+let recipientDelivery = 'none';
+
+async function loadRecipients(){
+  const list = document.getElementById('recipientList');
+  list.textContent = 'Loading...';
+  try{
+    renderRecipients(await adminFetch('/api/admin/notify/recipients', {method: 'GET'}));
+  } catch(e){
+    list.innerHTML = '<div class="field-hint">Couldn\'t load the recipient list.</div>';
+  }
+}
+
+function renderRecipients(data){
+  recipientDelivery = data.delivery || 'none';
+  let hint = recipientDelivery === 'flow' ? 'Emails are sent through a Power Automate flow.'
+    : (recipientDelivery === 'resend' ? 'Emails are sent through Resend.' : 'No email service or flow is set up in the Worker yet.');
+  if(data.allowedDomains && data.allowedDomains.length){
+    hint += ' Only addresses ending in ' + data.allowedDomains.map(function(d){ return '@' + d; }).join(' or ') + ' can be added.';
+  }
+  document.getElementById('recipientStatus').innerHTML = '<div class="field-hint" style="margin:0 0 6px;">' + esc(hint) + '</div>';
+  const list = document.getElementById('recipientList');
+  const people = data.recipients || [];
+  if(!people.length){
+    list.innerHTML = (data.fallback && data.fallback.length)
+      ? '<div class="field-hint">Nobody has been added here yet, so the digest goes to the address(es) in the Worker\'s NOTIFY_EMAIL setting: <b>' + esc(data.fallback.join(', ')) + '</b>. Adding someone here replaces that list.</div>'
+      : '<div class="field-hint">No recipients yet - the digest can\'t be sent until you add someone.</div>';
+    return;
+  }
+  list.innerHTML = people.map(function(p){
+    return '<div class="admin-row" style="padding:7px 0;">'
+      + '<div><div class="name" style="font-size:13px;">' + esc(p.email) + '</div><div class="meta">added by ' + esc(p.addedBy || '') + '</div></div>'
+      + '<button class="btn" data-remove-recipient="' + esc(p.email) + '" style="border-color:var(--fail);color:var(--fail);padding:5px 11px;font-size:12px;">Remove</button>'
+      + '</div>';
+  }).join('');
+}
+
+async function addRecipients(){
+  const input = document.getElementById('recipientInput'), msgEl = document.getElementById('recipientMsg'), btn = document.getElementById('recipientAddBtn');
+  if(!input.value.trim()){ showMsg(msgEl, 'Enter at least one email address.', 'err'); return; }
+  btn.disabled = true;
+  try{
+    const r = await adminFetch('/api/admin/notify/recipients', {
+      method: 'POST',
+      body: JSON.stringify({emails: input.value, actorName: sessionStorage.getItem('pd_user_email') || 'Admin'})
+    });
+    const skipped = r.skipped || [];
+    let msg = r.added.length ? 'Added ' + r.added.length + ' recipient' + (r.added.length === 1 ? '' : 's') + '.' : 'Nobody was added.';
+    if(skipped.length) msg += ' Skipped: ' + skipped.map(function(s){ return s.email + ' (' + s.reason + ')'; }).join('; ') + '.';
+    showMsg(msgEl, msg, r.added.length ? 'ok' : 'err');
+    if(r.added.length) input.value = '';
+    loadRecipients();
+  }catch(e){
+    showMsg(msgEl, e.message || 'Could not add.', 'err');
+  }finally{
+    btn.disabled = false;
+  }
+}
+document.getElementById('recipientAddBtn').addEventListener('click', addRecipients);
+document.getElementById('recipientInput').addEventListener('keydown', function(e){ if(e.key === 'Enter') addRecipients(); });
+
+document.getElementById('recipientList').addEventListener('click', async function(e){
+  const btn = e.target.closest('[data-remove-recipient]');
+  if(!btn) return;
+  const email = btn.getAttribute('data-remove-recipient');
+  if(!confirm('Stop sending digest emails to ' + email + '?')) return;
+  btn.disabled = true;
+  try{
+    await adminFetch('/api/admin/notify/recipients/remove', {method: 'POST', body: JSON.stringify({email: email})});
+    loadRecipients();
+  }catch(err){
+    alert('Could not remove: ' + err.message);
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('notifyTestBtn').addEventListener('click', async function(){
+  const msgEl = document.getElementById('notifyTestMsg');
+  this.disabled = true;
+  showMsg(msgEl, 'Sending...', 'info');
+  try{
+    const r = await adminFetch('/api/admin/notify/test', {method: 'POST', body: '{}'});
+    if(r.sent){
+      showMsg(msgEl, 'Sent (' + (r.count ? r.count + ' update' + (r.count === 1 ? '' : 's') + ' in it' : 'no new activity') + '). Check the inbox in a minute.' +
+        (recipientDelivery === 'flow' ? ' If nothing arrives, open the flow\'s run history in Power Automate - the Worker can only see that the flow accepted it.' : ''), 'ok');
+    }else{
+      showMsg(msgEl, 'Nothing was sent.', 'err');
+    }
+  }catch(e){
+    showMsg(msgEl, e.message || 'Could not send.', 'err');
+  }finally{
+    this.disabled = false;
   }
 });
 
