@@ -787,7 +787,7 @@ function parseDeviceReportForSync(workbook){
       const h = normalizeHeader(cell ? cell.v : '');
       if(h === 'deviceid') found.deviceId = c;
       else if(h === 'location') found.location = c;
-      else if(h === 'devicename') found.name = c;
+      else if(h === 'devicename' || h === 'equipmark') found.name = c;
       else if(h === 'zone') found.zone = c;
       else if(h === 'ampchannel' || h === 'channel') found.channel = c;
       else if(h.indexOf('model') !== -1) found.model = c;
@@ -968,7 +968,7 @@ function parseWorkbook(workbook){
       for(let c = 1; c <= 40; c++){
         const h = normHeader(cellVal(di, r, c));
         if(!h) continue;
-        if(h === 'componentname' || h === 'devicename') found.name = c;
+        if(h === 'componentname' || h === 'devicename' || h === 'equipmark') found.name = c;
         else if(h === 'status') found.status = c;
         else if(h === 'level') found.level = c;
         else if(h === 'location') found.location = c;
