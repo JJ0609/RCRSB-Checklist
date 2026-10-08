@@ -979,7 +979,7 @@ function parseWorkbook(workbook){
         else if(h === 'ipaddress') found.ip = c;
         else if(h === 'id') found.ipid = c;
         else if(h === 'avio' || h === 'av') found.avio = c;
-        else if(h === 'note') found.note = c;
+        else if(h === 'note' || h === 'designation&description') found.note = c;
       }
       if(found.name !== undefined){ headerRow = r; cols = found; zoneChannelCombined = combined; break; }
     }
