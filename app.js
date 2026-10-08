@@ -87,6 +87,40 @@ let punchDraftText = {};
 let syncEnabled = false;
 let pollTimer = null;
 
+//Text Validation for Add Location and Add Devices
+//Letters, numbers, spaces, and a few basic symbols are allowed, anything else, emojis,
+// < >, etc. is removed as it is typed or pasted. To allow another symbol, add it inside the
+// brackets below (a "-" or "/" needs the backslash in front, as shown).
+const NOT_ALLOWED = /[^A-Za-z0-9 \-_\/.,:;'"()#&+@%|!?]/g;
+
+// First turns what a phone keyboard or a copy-and-paste brings in into its plain equivalent, so
+// nothing useful is lost ("Dan’s Office" stays "Dan's Office", "Café" becomes "Cafe"), then removes
+// whatever is still not allowed.
+function cleanText(s){
+  return String( s == null ? '' : s)
+    .replace(/[\u2018\u2019\u201B]/g, "'")        // curly single quotes
+    .replace(/[\u201C\u201D]/g, '"')              // curly double quotes
+    .replace(/[\u2010-\u2015\u2212]/g, '-')       // en dash, em dash, minus sign
+    .replace(/\u2026/g, '...')                    // the single "..." character
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // accents: é -> e, ñ -> n
+    .replace(/[^\S ]+/g, ' ')                     // tabs, new lines, non-breaking spaces -> a plain space
+    .replace(NOT_ALLOWED, '');
+}
+//Cleaned with repeated spaces collapased and the ends trimmed, what is actually sent.
+function tidyText(s){ return cleanText(s).replace(/ {2,}/g, ' ').trim(); }
+
+//Cleans a box in place while keeping the cursor where it was.
+function cleanInputBox(el){
+  const before = el.value, after = cleanText(before);
+  if(after === before) return;
+  const caret = el.selectionStart == null ? after.length : cleanText(before.slice(0, el.selectionStart)).length;
+  el.value = after;
+  try { el.setSelectionRange(caret, caret); }catch(e){}
+}
+function isPlainTextBox(el){
+  return !!el && (el.id === 'newLocationName' || (typeof el.id === 'string' && el.id.indexOf('newDevice_') === 0));
+}
+
 function rebuildDeviceIndexes(){
   const map = {};
   SERVER_LOCATIONS.forEach(function(name){ map[name] = map[name] || []; });
@@ -853,7 +887,7 @@ async function syncFromRemote(){
 // ---------- writes ----------
 async function submitAddLocation(){
   const input = document.getElementById('newLocationName');
-  const name = (input ? input.value : locationDraftText).trim();
+  const name = tidyText(input ? input.value : locationDraftText);
   if(!name) return;
   const btn = document.getElementById('submitAddLocation');
   if(btn){ btn.disabled = true; btn.textContent = 'Adding...'; }
@@ -872,7 +906,7 @@ async function submitAddLocation(){
 
 async function submitAddDevice(){
   const location = addingDeviceFor;
-  const getVal = function(id){ const el = document.getElementById('newDevice_' + id); return el ? el.value.trim() : ''; };
+  const getVal = function(id){ const el = document.getElementById('newDevice_' + id); return el ? tidyText(el.value) : ''; };
   const fields = {
     location: location,
     name: getVal('name'), model: getVal('model'), ip: getVal('ip'), ipid: getVal('ipid'),
@@ -1698,6 +1732,7 @@ document.getElementById('content').addEventListener('change', function(e){
   if(e.target.id === 'punchLocFilter'){ punchLocationFilter = e.target.value; renderContent(); }
 });
 document.getElementById('content').addEventListener('input', function(e){
+  if(isPlainTextBox(e.target) && !e.isComposing) cleanInputBox(e.target);
   if(e.target.id === 'punchDesc' && openPunchFormFor){ punchDraftText[openPunchFormFor] = e.target.value; }
   if(e.target.id === 'editPunchDesc' && editingPunchId){ editDraftText[editingPunchId] = e.target.value; }
   if(e.target.id === 'newLocationName' && addingLocation){ locationDraftText = e.target.value; }
@@ -1707,6 +1742,13 @@ document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id && e.target.id.indexOf('newDevice_') === 0 && addingDeviceFor){
     deviceDraft[e.target.id.slice('newDevice_'.length)] = e.target.value;
   }
+});
+
+//A composed word (some keyboards build one before ommitting it) is cleaned once it is finished.
+document.getElementById('content').addEventListener('compositionend', function(e){
+  if(!isPlainTextBox(e.target)) return;
+  cleanInputBox(e.target);
+  e.target.dispatchEvent(new Event('input', {bubbles: true})); //So the draft picks up the cleaned text
 });
 
 document.getElementById('searchInput').addEventListener('input', function(e){
