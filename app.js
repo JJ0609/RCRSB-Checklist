@@ -91,7 +91,7 @@ let pollTimer = null;
 //Letters, numbers, spaces, and a few basic symbols are allowed, anything else, emojis,
 // < >, etc. is removed as it is typed or pasted. To allow another symbol, add it inside the
 // brackets below (a "-" or "/" needs the backslash in front, as shown).
-const NOT_ALLOWED = /[^A-Za-z0-9 \-_\/.,:;'"()#&+@%|!?]/g;
+const NOT_ALLOWED = /[^A-Za-z0-9 \-_\/.,:;'"()#&+@|]/g;
 
 // First turns what a phone keyboard or a copy-and-paste brings in into its plain equivalent, so
 // nothing useful is lost ("Dan’s Office" stays "Dan's Office", "Café" becomes "Cafe"), then removes
