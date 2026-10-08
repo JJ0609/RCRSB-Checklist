@@ -87,6 +87,111 @@ let punchDraftText = {};
 let syncEnabled = false;
 let pollTimer = null;
 
+// ---------- what may be typed into each box ----------
+// One table for the whole page. To change what a box accepts, change its line in FIELD_RULES.
+//   max      - longest allowed. These match the Worker's own limits (120 characters for most fields,
+//              60 for IP / IP ID, 2000 for notes, AV I/O and punch text), which it applies by silently
+//              cutting the rest off - so the boxes simply stop at the same length.
+//   fix      - tidies what was typed (spaces, case, leading zeros) before it is checked or sent.
+//   pattern  - a RegExp (or a function) the tidied value must match. Blank is always fine.
+//   level    - 'block' (the default): the form won't submit until it is fixed.
+//              'warn': shown in amber and the person is asked to confirm, but it isn't forbidden.
+//   hint     - the message shown under the box.
+const MAX_NAME = 120;
+const MAX_TEXT = 2000;
+const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+const HEX_ID = /^(0[3-9A-F]|[1-9A-E][0-9A-F]|F[0-9A-E])$/;   // a Crestron IP ID / Cresnet ID: two hex digits, 03 to FE
+
+const tidy = function(s){ return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); };
+const tidyHex = function(s){ const v = tidy(s).replace(/^0x/i, '').toUpperCase(); return /^[0-9A-F]$/.test(v) ? '0' + v : v; };   // "0x0a" / "a" -> "0A"
+const tidyIp = function(s){   // "010.000.001.020" -> "10.0.1.20"
+  const v = tidy(s).replace(/\s+/g, '');
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(v) ? v.split('.').map(function(o){ return o.replace(/^0+(?=\d)/, ''); }).join('.') : v;
+};
+
+const FIELD_RULES = {
+  name:      {label: 'Device name', required: true, max: MAX_NAME, fix: tidy, pattern: /^[^<>"\\|]*[A-Za-z0-9][^<>"\\|]*$/, hint: 'Use letters and numbers, like R1-AMP-01 (no < > " \\ |).'},
+  model:     {max: MAX_NAME, fix: tidy},
+  ip:        {label: 'IP address', max: 60, fix: tidyIp, attrs: ' inputmode="decimal" autocomplete="off"',
+              pattern: function(v){ return IPV4.test(v) || /^(DHCP|TBD|N\/A)$/i.test(v); }, hint: 'Use an IPv4 address like 10.20.30.40 (or DHCP / TBD).'},
+  ipid:      {label: 'IP ID', max: 60, fix: tidyHex, level: 'warn', attrs: ' autocapitalize="characters" autocomplete="off"', pattern: HEX_ID, hint: 'IP IDs are two hex digits from 03 to FE.'},
+  cresnetId: {label: 'Cresnet ID', max: MAX_NAME, fix: tidyHex, level: 'warn', attrs: ' autocapitalize="characters" autocomplete="off"', pattern: HEX_ID, hint: 'Cresnet IDs are two hex digits from 03 to FE.'},
+  zone:      {max: MAX_NAME, fix: tidy},
+  channel:   {max: MAX_NAME, fix: tidy},
+  status:    {max: MAX_NAME, fix: tidy},
+  level:     {max: MAX_NAME, fix: tidy},
+  controller:{max: MAX_NAME, fix: tidy},
+  dinRail:   {max: MAX_NAME, fix: tidy},
+  connection:{max: MAX_NAME, fix: tidy},
+  avio:      {max: MAX_TEXT, fix: tidy},
+  note:      {max: MAX_TEXT, fix: tidy}
+};
+
+function matchesRule(pattern, v){ return pattern instanceof RegExp ? pattern.test(v) : !!pattern(v); }
+
+// Tidies every value in `values` (in place) and returns {field: {text, level}} for whatever is wrong.
+function validateFields(values){
+  const out = {};
+  Object.keys(values).forEach(function(id){
+    const rule = FIELD_RULES[id];
+    if(!rule) return;
+    const v = rule.fix ? rule.fix(values[id]) : String(values[id] == null ? '' : values[id]).trim();
+    values[id] = v;
+    if(!v){ if(rule.required) out[id] = {text: (rule.label || 'This') + ' is required.', level: 'block'}; return; }
+    if(rule.pattern && !matchesRule(rule.pattern, v)) out[id] = {text: rule.hint, level: rule.level || 'block'};
+  });
+  return out;
+}
+
+// A location is stored tidied and uppercased (see the Worker), so "elec 309" and "ELEC 309" are one location.
+function locationProblem(name){
+  if(!name) return 'Enter a location name.';
+  if(name.length > MAX_NAME) return 'Keep it under ' + MAX_NAME + ' characters.';
+  if(!/^[^<>]*[A-Za-z0-9][^<>]*$/.test(name)) return 'Use letters and numbers, like Elec 309 | AV Rack 2 (no < or >).';
+  const norm = name.toUpperCase();
+  if(LOCATIONS.some(function(l){ return String(l.name).toUpperCase() === norm; })) return 'That location already exists in this project.';
+  return '';
+}
+
+// Messages shown under boxes. They are kept in formErrors so a redraw of the form (a background sync,
+// a button press) doesn't lose them. A box that is checked as you leave it gets a message line that is
+// ALWAYS present (empty until needed) - a line that only appeared on error would push the buttons below
+// it down mid-tap and swallow the tap, the same trap the sync code avoids elsewhere.
+let formErrors = {};   // input id -> {text, level}
+function msgHtml(id, reserve){
+  const e = formErrors[id];
+  if(!e && !reserve) return '';
+  return '<div class="field-msg" data-for="' + esc(id) + '"' + (reserve ? ' data-slot="1"' : '') + ' style="font-size:11px;font-weight:600;margin-top:3px;'
+    + (reserve ? 'min-height:15px;line-height:15px;' : '') + 'color:' + (e && e.level === 'warn' ? 'var(--open)' : 'var(--fail)') + ';">' + (e ? esc(e.text) : '') + '</div>';
+}
+function borderFor(id){
+  const e = formErrors[id];
+  return e ? 'border-color:' + (e.level === 'warn' ? 'var(--open)' : 'var(--fail)') + ';' : '';
+}
+// Updates the message under one box in place, without redrawing the form (which would drop focus).
+function showFieldMessage(el, msg){
+  if(!el || !el.id) return;
+  if(msg) formErrors[el.id] = msg; else delete formErrors[el.id];
+  el.style.borderColor = msg ? (msg.level === 'warn' ? 'var(--open)' : 'var(--fail)') : 'var(--border)';
+  let line = null;
+  document.querySelectorAll('.field-msg').forEach(function(n){ if(n.getAttribute('data-for') === el.id) line = n; });
+  if(line){
+    line.textContent = msg ? msg.text : '';
+    line.style.color = (msg && msg.level === 'warn') ? 'var(--open)' : 'var(--fail)';
+    if(!msg && !line.hasAttribute('data-slot')) line.remove();
+  }else if(msg){
+    el.insertAdjacentHTML('afterend', msgHtml(el.id, false));
+  }
+}
+// "Log punch item" with nothing typed used to do nothing at all; now it says why.
+function flagEmpty(id){
+  formErrors = {};
+  formErrors[id] = {text: 'Describe the issue first.', level: 'block'};
+  renderContent();
+  const el = document.getElementById(id);
+  if(el) el.focus();
+}
+
 function rebuildDeviceIndexes(){
   const map = {};
   SERVER_LOCATIONS.forEach(function(name){ map[name] = map[name] || []; });
@@ -222,7 +327,8 @@ function renderLocations(){
   html += '</div>';
   if(addingLocation){
     html += '<div class="punch-form" style="margin-top:12px;">'
-      + '<input id="newLocationName" type="text" placeholder="e.g. Elec 309 | AV Rack 2" value="' + esc(locationDraftText) + '" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);">'
+      + '<input id="newLocationName" type="text" maxlength="' + MAX_NAME + '" placeholder="e.g. Elec 309 | AV Rack 2" value="' + esc(locationDraftText) + '" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);' + borderFor('newLocationName') + '">'
+      + msgHtml('newLocationName', true)
       + '<div class="form-actions">'
       + '<button class="btn ghost" id="cancelAddLocation">Cancel</button>'
       + '<button class="btn primary" id="submitAddLocation">Add location</button>'
@@ -310,7 +416,7 @@ function locationPunchFormHtml(){
     ? 'What needs attention on this project overall? e.g. Waiting on client for final AV drawings'
     : 'What needs attention in this location? e.g. Missing floor box cover';
   return '<div class="punch-form" style="margin-top:10px;">'
-    + '<textarea id="locationPunchDesc" placeholder="' + esc(placeholder) + '">' + esc(locationPunchDraft) + '</textarea>'
+    + '<textarea id="locationPunchDesc" maxlength="' + MAX_TEXT + '" style="' + borderFor('locationPunchDesc') + '" placeholder="' + esc(placeholder) + '">' + esc(locationPunchDraft) + '</textarea>' + msgHtml('locationPunchDesc')
     + '<div class="sev-row">'
     + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
     + '</div>'
@@ -326,9 +432,14 @@ function locationPunchFormHtml(){
 //All fields are available, but only device name is required
 function deviceDraftField(id, label, placeholder, maxlength){
   const val = deviceDraft[id] || '';
+  const rule = FIELD_RULES[id] || {};
+  const max = maxlength || rule.max;
+  const key = 'newDevice_' + id;
+  const checked = !!(rule.pattern || rule.required);   // these get a message line, always present (see msgHtml)
   return '<div style="margin-bottom:8px;">'
     + '<label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:3px;">' + esc(label) + '</label>'
-    + '<input id="newDevice_' + id + '" type="text" placeholder="' + esc(placeholder || '') + '"' + (maxlength ? ' maxlength="' + maxlength + '"' : '') + ' value="' + esc(val) + '" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);">'
+    + '<input id="' + key + '" type="text" placeholder="' + esc(placeholder || '') + '"' + (max ? ' maxlength="' + max + '"' : '') + (rule.attrs || '') + ' value="' + esc(val) + '" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);' + borderFor(key) + '">'
+    + msgHtml(key, checked)
     + '</div>';
 }
 
@@ -385,7 +496,7 @@ function renderFailedChecks(){
 function deviceNoteHtml(d){
   if(editingNotesId === d.id){
     return '<div class="punch-form" style="margin-top:6px;padding:8px;">'
-      + '<textarea id="editNoteText" placeholder="Add a note for this device">' + esc(editNoteText[d.id] !== undefined ? editNoteText[d.id] : (d.note || '')) + '</textarea>'
+      + '<textarea id="editNoteText" maxlength="' + MAX_TEXT + '" placeholder="Add a note for this device">' + esc(editNoteText[d.id] !== undefined ? editNoteText[d.id] : (d.note || '')) + '</textarea>'
       + '<div class="form-actions">'
       + '<button class="btn ghost" id="cancelEditNote" data-device="' + esc(d.id) + '">Cancel</button>'
       + '<button class="btn primary" id="saveEditNote" data-device="' + esc(d.id) + '">Save note</button>'
@@ -452,7 +563,7 @@ function deviceCardHtml(d, showLocation){
   if(openPunchFormFor === d.id){
 
     html += '<div class="punch-form">'
-      + '<textarea id="punchDesc" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>'
+      + '<textarea id="punchDesc" maxlength="' + MAX_TEXT + '" style="' + borderFor('punchDesc') + '" placeholder="What needs attention? e.g. No signal on HDMI input 2">' + esc(punchDraftText[d.id] || '') + '</textarea>' + msgHtml('punchDesc')
       + '<div class="sev-row">'
       + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
       + '</div>'
@@ -506,7 +617,7 @@ function renderPunchList(){
           + '<div class="punch-body" style="width:100%;">'
           + '<div class="top"><span class="loc-dev">' + esc(p.deviceName || 'General') + (p.location ? ' <span class="loc">&middot; ' + esc(p.location) + '</span>' : '') + '</span></div>'
           + '<div class="punch-form" style="margin-top:8px;padding:0;background:none;">'
-          + '<textarea id="editPunchDesc">' + esc(editDraftText[p.id] !== undefined ? editDraftText[p.id] : p.description) + '</textarea>'
+          + '<textarea id="editPunchDesc" maxlength="' + MAX_TEXT + '" style="' + borderFor('editPunchDesc') + '">' + esc(editDraftText[p.id] !== undefined ? editDraftText[p.id] : p.description) + '</textarea>' + msgHtml('editPunchDesc')
           + '<div class="sev-row">'
           + SEVERITIES.map(function(s){ return '<button class="sev-btn' + (pendingSeverity===s?' sel':'') + '" data-sev="' + s + '">' + s.charAt(0).toUpperCase()+s.slice(1) + '</button>'; }).join('')
           + '</div>'
@@ -853,8 +964,16 @@ async function syncFromRemote(){
 // ---------- writes ----------
 async function submitAddLocation(){
   const input = document.getElementById('newLocationName');
-  const name = (input ? input.value : locationDraftText).trim();
-  if(!name) return;
+  const name = tidy(input ? input.value : locationDraftText);
+  const problem = locationProblem(name);
+  if(problem){
+    locationDraftText = name;
+    formErrors = {newLocationName: {text: problem, level: 'block'}};
+    renderContent();
+    const box = document.getElementById('newLocationName');
+    if(box) box.focus();
+    return;
+  }
   const btn = document.getElementById('submitAddLocation');
   if(btn){ btn.disabled = true; btn.textContent = 'Adding...'; }
   try{
@@ -880,7 +999,28 @@ async function submitAddDevice(){
     avio: getVal('avio'), note: getVal('note'),
     dinRail: getVal('dinRail'), connection: getVal('connection'), cresnetId: getVal('cresnetId'), controller: getVal('controller')
   };
-  if(!fields.name){ alert('Device name is required.'); return; }
+  const problems = validateFields(fields);   // also tidies fields in place (spaces, case, leading zeros)
+  const blocking = Object.keys(problems).filter(function(k){ return problems[k].level !== 'warn'; });
+  if(blocking.length){
+    Object.keys(fields).forEach(function(k){ if(k !== 'location') deviceDraft[k] = fields[k]; });   // keep the tidied values
+    formErrors = {};
+    Object.keys(problems).forEach(function(k){ formErrors['newDevice_' + k] = problems[k]; });
+    renderContent();
+    const first = document.getElementById('newDevice_' + blocking[0]);
+    if(first) first.focus();
+    return;
+  }
+  // Not forbidden, but worth a second look: a format that looks off, or a name that's already in this project.
+  const heads = Object.keys(problems).map(function(k){ return '- ' + FIELD_RULES[k].label + ': ' + problems[k].text; });
+  const twin = DEVICES.find(function(d){ return String(d.name).toLowerCase() === fields.name.toLowerCase(); });
+  if(twin) heads.push('- There is already a device named "' + twin.name + '"' + (twin.location ? ' in ' + twin.location : '') + '.');
+  if(heads.length && !confirm(heads.join('\n') + '\n\nAdd this device anyway?')){
+    Object.keys(fields).forEach(function(k){ if(k !== 'location') deviceDraft[k] = fields[k]; });
+    formErrors = {};
+    Object.keys(problems).forEach(function(k){ formErrors['newDevice_' + k] = problems[k]; });
+    renderContent();
+    return;
+  }
   const btn = document.getElementById('submitAddDevice');
   if(btn){ btn.disabled = true; btn.textContent = 'Adding...'; }
   try{
@@ -935,7 +1075,7 @@ function toggleCheck(deviceId, key){
 function submitPunch(deviceId){
   const dev = DEVICE_BY_ID[deviceId];
   const desc = (punchDraftText[deviceId] || document.getElementById('punchDesc').value || '').trim();
-  if(!desc) return;
+  if(!desc){ flagEmpty('punchDesc'); return; }
   const cid = newClientId();
   const tempId = 'local-' + cid;
   const item = {
@@ -952,7 +1092,7 @@ function submitPunch(deviceId){
 }
 function submitLocationPunch(){
   const desc = (locationPunchDraft || (document.getElementById('locationPunchDesc') || {}).value || '').trim();
-  if(!desc) return;
+  if(!desc){ flagEmpty('locationPunchDesc'); return; }
   const cid = newClientId();
   const tempId = 'local-' + cid;
   const isProjectWide = addingLocationPunchFor === PROJECT_WIDE_SCOPE;
@@ -985,7 +1125,7 @@ function submitPunchEdit(punchId){
   const p = punches.find(function(x){ return x.id === punchId; });
   if(!p) return;
   const desc = (editDraftText[punchId] !== undefined ? editDraftText[punchId] : (document.getElementById('editPunchDesc') || {}).value || '').trim();
-  if(!desc) return;
+  if(!desc){ flagEmpty('editPunchDesc'); return; }
   p.description = desc;
   p.severity = pendingSeverity;
   p.ownership = pendingOwnership;
@@ -1576,6 +1716,8 @@ window.addEventListener('pageshow', function(e){ if(e.persisted && currentProjec
 
 // ---------- events ----------
 document.getElementById('content').addEventListener('click', function(e){
+  // opening or closing any form starts it clean: no leftover messages from an earlier try
+  if(e.target.closest('#addLocationBtn, #cancelAddLocation, #addDeviceBtn, #cancelAddDevice, #cancelPunch, #cancelEditPunch, #cancelLocationPunch, #cancelEditNote, .punch-add-btn, [data-editpunch], [data-editnote], #addLocationPunchBtn, #addProjectPunchBtn')) formErrors = {};
   const locCard = e.target.closest('[data-loc]');
   if(locCard){ currentLocation = locCard.getAttribute('data-loc'); view = 'location-detail'; searchQuery=''; document.getElementById('searchInput').value=''; renderContent(); return; }
 
@@ -1698,6 +1840,7 @@ document.getElementById('content').addEventListener('change', function(e){
   if(e.target.id === 'punchLocFilter'){ punchLocationFilter = e.target.value; renderContent(); }
 });
 document.getElementById('content').addEventListener('input', function(e){
+  if(formErrors[e.target.id]) showFieldMessage(e.target, null);   // typing again clears that box's message
   if(e.target.id === 'punchDesc' && openPunchFormFor){ punchDraftText[openPunchFormFor] = e.target.value; }
   if(e.target.id === 'editPunchDesc' && editingPunchId){ editDraftText[editingPunchId] = e.target.value; }
   if(e.target.id === 'newLocationName' && addingLocation){ locationDraftText = e.target.value; }
@@ -1706,6 +1849,26 @@ document.getElementById('content').addEventListener('input', function(e){
   if(e.target.id === 'punchDesc' || e.target.id === 'locationPunchDesc') persistDraft();
   if(e.target.id && e.target.id.indexOf('newDevice_') === 0 && addingDeviceFor){
     deviceDraft[e.target.id.slice('newDevice_'.length)] = e.target.value;
+  }
+});
+
+// Checked as you leave a box: tidy what was typed and say right away if it won't do.
+document.getElementById('content').addEventListener('focusout', function(e){
+  const el = e.target, id = el.id || '';
+  if(id.indexOf('newDevice_') === 0 && addingDeviceFor){
+    const key = id.slice('newDevice_'.length), rule = FIELD_RULES[key];
+    if(!rule) return;
+    const values = {};
+    values[key] = el.value;
+    const problem = validateFields(values)[key];
+    if(values[key] !== el.value){ el.value = values[key]; deviceDraft[key] = values[key]; }
+    if(problem && problem.text.indexOf('required') !== -1) return;   // an empty required box isn't an error until they press Add
+    showFieldMessage(el, problem || null);
+  }else if(id === 'newLocationName' && addingLocation){
+    const name = tidy(el.value);
+    if(name !== el.value){ el.value = name; locationDraftText = name; }
+    const problem = name ? locationProblem(name) : '';
+    showFieldMessage(el, problem ? {text: problem, level: 'block'} : null);
   }
 });
 
