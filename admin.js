@@ -968,7 +968,7 @@ function parseWorkbook(workbook){
       for(let c = 1; c <= 40; c++){
         const h = normHeader(cellVal(di, r, c));
         if(!h) continue;
-        if(h === 'componentname' || h === 'devicename' || h === 'equipmark') found.name = c;
+        if(h === 'componentname' || h === 'devicename' || h === 'equip.mark' || h === 'equipmark') found.name = c;
         else if(h === 'status') found.status = c;
         else if(h === 'level') found.level = c;
         else if(h === 'location') found.location = c;
