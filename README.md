@@ -1,192 +1,118 @@
-# RCRSB Commissioning — GitHub Pages + shared sync
+# Power Design Commissioning
 
-This is the RCRSB commissioning app adapted to run on GitHub Pages with
-shared, persistent state (device checklists + punch list) backed by a
-real SQLite database (Turso), through a security proxy (Cloudflare Worker).
+A field tool for commissioning systems across multiple projects. Technicians work through each location's devices, record Power / Network / Function checks, and log punch items. Everyone sees the same live data, on a phone, tablet or laptop.
 
-## What changed from the original artifact
+## At a glance
 
-The original file used `window.claude.use('db')` and
-`window.claude.use('downloads')` — APIs that only exist inside Claude's
-own artifact runtime. Outside that environment (i.e. on GitHub Pages)
-those calls silently do nothing, which is why the original would still
-render but never sync or export.
+- **Many projects, two sides each:**  projects can have an **AV** side and an **LC** side, with separate devices, locations, checks and punch items.
+- **Fast on site:** one tap per check, instant on-screen feedback, and nothing waits on the network.
+- **Works offline:** install it like an app, save your projects, and keep working with no signal. Changes sync by themselves.
+- **Team visibility:** shared progress, an activity email, and Excel exports of the current state.
+- **Admin tools:** create and maintain projects straight from an Info Sheet, with no code changes.
 
-- **Sync**: replaced with calls to a small Cloudflare Worker API
-  (`/api/state`, `/api/check`, `/api/punch`, `/api/punch/toggle`), which
-  is the only thing that talks to the actual database.
-- **CSV export**: replaced with a plain in-browser download (`Blob` +
-  temporary link click) — works in any browser, no special API needed.
-- Everything else — the UI, the device list, local caching, optimistic
-  updates while offline — is unchanged.
+## For the field
 
-## Architecture
+### Signing in and finding a project
 
-```
-Browser (GitHub Pages)  --->  Cloudflare Worker  --->  Turso (SQLite)
-     no DB credentials         holds the real token      actual data
-     only 4 fixed endpoints    only 4 fixed operations
-```
+- Sign in with your email and choose the **AV** or **LC** side. The app remembers your last email.
+- The project list can be filtered by **region** and split into **Active** and **Archived**. It only shows projects that have devices on your side.
+- **Switch to AV / LC** moves between the two sides of the same project. It's hidden when the other side is empty or you haven't been given access to it.
 
-This is the hardened version discussed previously: the browser never
-holds anything capable of running arbitrary SQL. It can only call four
-narrow operations, each of which runs one fixed, parameterized query:
+### Locations
 
-| Endpoint | What it's allowed to do |
-|---|---|
-| `GET /api/state?project=rcrsb` | Read all checklist + punch rows for that project |
-| `POST /api/check` | Set one of `power`/`network`/`function` to `pass`/`fail`/`null` for one device |
-| `POST /api/punch` | Insert a new punch item with a server-generated id |
-| `POST /api/punch/toggle` | Flip a punch item between `open` and `resolved` |
+- Every location is a card with a progress bar, a tested count, and a badge: **N open** punch items, **N failed** checks, or **done**.
+- The header shows overall **devices tested**, **open punch items** and **failed checks**. Tap the last two to jump straight to those lists.
+- **Search** covers locations, devices and models (and Cresnet IDs and controllers on the LC side).
+- Add a **new location** at any time.
 
-Every input is validated against a whitelist (project id, check key,
-check value, severity) or a length/format check before it touches the
-database — there's no path from the browser to an arbitrary query.
+### Devices and checks
 
-## 1. Create the Turso database
+- Each device card shows its model, IP and IP ID, zone, amp channel, switch port, and (on the LC side) Cresnet ID, controller, DIN rail and connection.
+- Tap **Power**, **Network** and **Function** to cycle *Untested → Pass → Fail → Untested*. Every change records who made it and when.
+- Add or edit a **note** on any device, and add a **new device** (only the name is required).
+- The **Failed Checks** view lists every device with a failed check, across all locations.
 
-```
-curl -sSfL https://get.tur.so/install.sh | bash
-turso auth login
-turso db create rcrsb-commissioning
-turso db show rcrsb-commissioning --url      # gives libsql://...
-turso db tokens create rcrsb-commissioning   # gives the auth token
-```
+### Punch items
 
-Use the `https://` version of the URL (swap the `libsql://` prefix).
-The Worker creates the two tables automatically on first request, so no
-manual schema step is required (`schema.sql` is included for reference).
+- Log an item against a **device**, a **location**, or the **whole project** (shown as *General*).
+- Each has a **severity** (minor, major, critical) and an **ownership** (Field Tech/Install, Programming, Configuration).
+- Items for a location appear on that location's page, just like device items appear under their device.
+- **Resolve**, **edit** or **delete** items from the Punch List tab. Deleting asks for confirmation, and the deletion is recorded with who and when.
+- Filter by open, resolved or all, and by location, and **export the list to CSV**.
+- A half-written punch item is kept if the app closes, and comes back when you return to the project.
 
-## 2. Deploy the Cloudflare Worker
+### Excel export
 
-**Option A — dashboard (no CLI needed):**
-1. [dash.cloudflare.com](https://dash.cloudflare.com) → Workers & Pages → Create → Create Worker.
-2. Give it a name (e.g. `rcrsb-commissioning-sync`), deploy the default, then click **Edit code**.
-3. Replace the contents with `worker/index.js` from this package. Save & deploy.
-4. Go to **Settings → Variables and Secrets** and add three **secret** variables:
-   - `TURSO_DB_URL` — the `https://...turso.io` URL from step 1
-   - `TURSO_AUTH_TOKEN` — the token from step 1
-   - `ALLOWED_ORIGIN` — the exact origin your GitHub Pages site will be served from, e.g. `https://yourorg.github.io` (no trailing slash; comma-separate if you'll test from more than one origin, e.g. also `http://localhost:5500` while developing)
-5. Note the Worker's URL, e.g. `https://rcrsb-commissioning-sync.yourname.workers.dev`.
+- Export a styled **Info Sheet** for any project: the device list with every check result, who last updated it and when (Eastern time), notes, and a **Punch List** sheet.
+- The export can be edited and imported back through the admin panel.
 
-**Option B — CLI (`wrangler`):**
-```
-cd worker
-npx wrangler deploy
-npx wrangler secret put TURSO_DB_URL
-npx wrangler secret put TURSO_AUTH_TOKEN
-npx wrangler secret put ALLOWED_ORIGIN
-```
+### Typing rules
 
-## 3. Point the app at the Worker
+Add Location and Add Device accept letters, numbers, spaces and basic symbols. Emojis and unusual characters are removed as you type, and phone-keyboard characters are converted to plain ones (curly quotes, long dashes, accented letters).
 
-In `config.js`, set:
+## Works offline
 
-```js
-const SYNC_API_BASE = "https://rcrsb-commissioning-sync.yourname.workers.dev";
-```
+- **Install it:** add it to your Home Screen (iPad/iPhone) or install it as an app in Chrome.
+- **Save for offline use:** one tap on the project list stores every active project on the device.
+- **Nothing is lost:** check taps, punch items, resolves, edits, deletions and notes made with no signal are saved on the device and sent automatically when you're back online. A banner always shows what's waiting.
+- **Safe to retry:** each kind of change can be sent twice without duplicating anything.
 
-If you leave this as the placeholder, the app runs in **local-only mode**
-(each device keeps its own copy in `localStorage`, matching the original
-artifact's offline fallback behavior) — nothing breaks, it just won't
-share state until you configure this.
+## Admin panel
 
-## 4. Deploy to GitHub Pages
+A separate, password-protected page for managing the platform.
 
-Push `index.html`, `style.css`, `config.js`, `devices.js`, `app.js`, and
-`power-design-logo-white.png` to a repo (all in the same folder) and
-enable Pages on it (Settings → Pages). The `worker/` folder is deployed
-separately to Cloudflare and never ships to the browser.
+| Area | What it does |
+| --- | --- |
+| **Create a project** | Upload an Info Sheet and set the name and region. |
+| **Update devices** | Add new devices and update existing ones from a newer file. Nothing is deleted. |
+| **Sync devices** | Make the project match the file exactly. Devices missing from the file are removed, but punch history is kept. |
+| **Import results** | Bring an edited Excel export back in to update device details, checks and punch items. |
+| **Access** | Grant people access per project and per side, one at a time or in bulk from a spreadsheet. A side with no grants is open to everyone. |
+| **Archive / delete** | Move a finished project to Archived, or remove it completely. |
+| **Notification emails** | Manage who receives the activity email, and send a test. |
 
-## Security notes
+## Supported source files
 
-- **The Turso token never reaches the browser.** It lives only in the
-  Worker's encrypted environment variables. Anyone can view your
-  GitHub Pages source and learn nothing that lets them touch the
-  database directly.
-- **CORS is locked to `ALLOWED_ORIGIN`.** Requests from other origins
-  are rejected by the Worker.
-- **Every write is whitelisted and parameterized** — a malicious or
-  malformed request can flip a switch or add a punch item, and nothing
-  else. It can't drop a table, read other projects' data, or run
-  injected SQL.
-- **Still open by design**: anyone with the page URL can toggle checks
-  and add/resolve punch items, with no login — that matches what you
-  asked for originally (anyone can view and change it).
+- **Standard Info Sheets**, including switch port maps.
+- **LC sheets**, including controllers and their Cresnet devices.
+- **Tables extracted from drawings.** The two extracted lists are combined into one device list. Rack equipment gets its rack's location, and non-network items such as surge protectors are left out. The admin sees a short report of what was combined, skipped or flagged. (Work In Progress).
 
-### Further hardening, if you want it later
+## Activity emails
 
-| Addition | What it adds | Effort |
-|---|---|---|
-| Cloudflare Turnstile before writes | Blocks scripted/bot abuse while staying invisible to real people | ~15–20 min |
-| Cloudflare Rate Limiting Rules (needs a custom domain on the Worker, not just `*.workers.dev`) | Caps how fast one IP can hit the API | ~15 min |
-| A per-tech access code (shared team password, not individual logins) | Cuts out randos who stumble on the URL, without building real auth | ~30 min |
+When someone finishes a session, and again as a daily catch-up, the team receives a summary of what changed, grouped by project and side:
 
-None of these are in the current build — say the word if you want any
-added, since each is a small, self-contained change to `worker/index.js`.
+- checks updated
+- new and resolved punch items
+- **punch items deleted**, with who deleted them and when
+- new locations and devices
+- device notes
+- projects archived or restored
 
-## Known limitation — no real-time push
+If nothing changed, nothing is sent.
 
-The original used Firestore-style `onSnapshot` for instant updates.
-Turso's HTTP API doesn't offer a push channel the same way, so this
-version polls the Worker every 5 seconds (`SYNC_POLL_MS` in
-`config.js`) instead. Your own edits still apply instantly (optimistic
-UI) — only *other* people's changes take up to ~5 seconds to appear on
-your screen.
+## Good to know
 
-## Files
+- **Connection needed for:** adding locations or devices, and everything on the admin page.
+- **Updates arrive on refresh,** every few seconds while the app is open, not instantly. Phones can't send in the background, so the app has to be open for waiting changes to go.
+- **Two people editing the same item:** the last change wins.
+- **Everyone with access** to a project can edit and delete its punch items.
+- **Deleting a punch item** hides it everywhere but keeps a record in the database.
+- **Times** in exports and emails are US Eastern.
+- **Appearance:** light and dark themes, using the Power Design brand colors and fonts.
 
-```
-index.html                     page structure only — rarely needs editing
-style.css                      all visual styling
-config.js                      the only file most people need to touch:
-                                  SYNC_API_BASE, SYNC_POLL_MS
-devices.js                     project device data — swap this out to
-                                  commission a different project
-app.js                         all the logic (rendering, sync, events)
-power-design-logo-white.png    header logo
-worker/index.js                Cloudflare Worker — the security proxy
-worker/wrangler.toml           optional CLI deploy config
-worker/schema.sql              reference schema (auto-created by the Worker)
-```
+## Current version
 
-The original was one 940-line HTML file with markup, data, config, and
-logic all interleaved. It's now split so each kind of change touches
-exactly one file:
+**Last updated: October 2026**
+Recent additions:
 
-| To change... | Edit... |
-|---|---|
-| Which Worker the app syncs to | `config.js` |
-| The device list (new project, added/removed devices) | `devices.js` |
-| Colors, fonts, spacing, layout | `style.css` |
-| How something behaves (rendering, sync logic, new features) | `app.js` |
-| The logo | replace `power-design-logo-white.png` |
+- Installable app with full offline use and automatic sync
+- AV and LC sides on every project, with per-side access
+- Punch items can be edited and deleted (deletions are recorded and emailed)
+- Location punch items appear on their location page
+- Import of device lists extracted from drawings
+- Notification recipients managed from the admin panel
+- Plain-text rules on Add Location and Add Device
 
-All five files (plus the logo) need to be uploaded together to GitHub
-Pages — `index.html` loads the others via `<link>` and `<script src>`,
-so a missing file means a broken page, not a silent partial failure.
+## Built with
 
-### Commissioning a new project
-
-1. Run `ExtractData.py` against the new project's Info Sheet (see
-   `CommissioningArtifactBuildNotes.txt` in the main project for that
-   script's details).
-2. Replace the contents of `devices.js` with the new `PROJECT_DEVICES`
-   array. Keep the `const PROJECT_DEVICES = [...]` wrapper.
-3. In `app.js`, the `PROJECTS` object still only has one entry
-   (`"rcrsb"`) — for a second *simultaneous* project (not a replacement),
-   add a new key there and give `devices.js` a second exported array.
-   For simply switching which single project this deployment tracks,
-   step 2 alone is enough.
-4. Update `ALLOWED_PROJECTS` in `worker/index.js` if you add a new
-   project key, then redeploy the Worker.
-
-## Confidence note
-
-The Worker's calls to Turso's HTTP (Hrana v2 pipeline) API are built
-against Turso's documented request/response format, but this was not
-tested against a live database from this environment (no network
-access to turso.io here). Test the full round trip — toggle a check,
-refresh, confirm it persisted — right after you wire up steps 1–3, and
-check the Worker's logs (Cloudflare dashboard → your Worker → Logs) if
-something doesn't come back as expected.
+Static pages (HTML, CSS and JavaScript, no build step) on GitHub Pages, talking to a private serverless API and a hosted SQLite database.
