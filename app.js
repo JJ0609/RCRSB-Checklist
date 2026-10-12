@@ -304,6 +304,20 @@ function renderLocationDetail(){
   devices.forEach(function(d){ html += deviceCardHtml(d); });
   html += '</div>';
 
+  //Punch items reported against this location rather than a device.
+  //Project-wide items, which have no location at all, stay on the punch list tab.
+  const locationPunches = punches.filter(function(p){
+    return !p.deviceId && p.location === loc.name && (!searchQuery.trim() || matchesSearch(p.description));
+  });
+  if(locationPunches.length){
+    html += '<div class="device-card" style="margin-top:10px;">'
+    + '<div class="device-name">Location punch items</div>'
+    + '<div class="device-model"> Not tied to a specific device</div>'
+    + '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">'
+    + locationPunches.map(punchRowHtml).join('')
+    +'</div></div>'
+  }
+
   if(addingLocationPunchFor === loc.name){
     html += locationPunchFormHtml();
   } else {
@@ -434,6 +448,21 @@ function deviceNoteHtml(d){
   return '<button class="btn ghost" style="margin-top:6px;padding:3px 9px;font-size:11px;" data-editnote="' + esc(d.id) + '">+ Add note</button>';
 }
 
+//One punch item as the compact row shown under a device: its description, colored by how serious it is,
+//green once resolved, with its Open / Resolved button. Used under each device and fot an item
+//reported against a location rather than a device, under that location.
+function punchRowHtml(p){
+  const st = p.status === 'resolved' ? {bg:'var(--pass-bg)', txt:'var(--pass)'}
+  : p.severity === 'critical' ? {bg:'var(--fail-bg)', txt:'var(--fail)'}
+  : p.severity === 'major' ? {bg:'var(--major-bg)', txt:'var(--major)'}
+  : {bg:'var(--pending-bg)', txt:'var(--pending)'};
+  return '<div style="font-size:11.5px;display:flex;justify-content:space-between;gap:6px;align-items:center;background:'
+  + st.bg + ';border-radius:7px;padding:5px 8px;">'
+  + '<span style="color:' + st.txt + ';font-weight:600;">' + esc(p.description) + '</span>'
+  + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '" style="padding:3px 9px;font-size:10.5px;">' + (p.status==='open'?'Open':'Resolved') + '</button>'
+  + '</div>';
+}
+
 function deviceCardHtml(d, showLocation){
   const c = getCheck(d.id);
   const ports = portSummary(d);
@@ -469,17 +498,7 @@ function deviceCardHtml(d, showLocation){
   const devicePunches = punches.filter(function(p){ return p.deviceId === d.id; });
   if(devicePunches.length){
     html += '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">';
-    devicePunches.forEach(function(p){
-      const st = p.status === 'resolved' ? {bg:'var(--pass-bg)', txt:'var(--pass)'}
-        : p.severity === 'critical' ? {bg:'var(--fail-bg)', txt:'var(--fail)'}
-        : p.severity === 'major' ? {bg:'var(--major-bg)', txt:'var(--major)'}
-        : {bg:'var(--pending-bg)', txt:'var(--pending)'};
-      html += '<div style="font-size:11.5px;display:flex;justify-content:space-between;gap:6px;align-items:center;background:'
-        + st.bg + ';border-radius:7px;padding:5px 8px;">'
-        + '<span style="color:' + st.txt + ';font-weight:600;">' + esc(p.description) + '</span>'
-        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '" style="padding:3px 9px;font-size:10.5px;">' + (p.status==='open'?'Open':'Resolved') + '</button>'
-        + '</div>';
-    });
+    devicePunches.forEach(function(p){ html += punchRowHtml(p); });
     html += '</div>';
   }
 
