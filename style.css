@@ -334,6 +334,7 @@ a{color:inherit; touch-action: manipulation;}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
 .btn.primary:hover{background:var(--accent-deep);}
 .btn.ghost:hover{background:var(--surface-3);}
+.btn.delete{background: var(--accent);}
 .btn.delete:hover{background:var(--fail);}
 
 .empty{padding:40px 10px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
