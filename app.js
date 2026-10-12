@@ -568,6 +568,7 @@ function renderPunchList(){
         + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">'
         + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?'Mark resolved':'Resolved') + '</button>'
         + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
+        + '<button class="btn delete" style="padding:4px 10px;font-size:11px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
         + '</div>'
         + '</div>';
     });
