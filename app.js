@@ -721,6 +721,15 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
   });
 }
 
+//The server keeps a record of who deleted it and when (it is a soft delete there),
+//and sending the same delete twice is harmless.
+async function pushDeletePunch(punchId, actorName){
+  return apiCall('/api/punch/delete', {
+    method: 'POST',
+    body: JSON.stringify({project: currentProject, id: punchId, actorName: actorName})
+  });
+}
+
 // While someone is actively typing a punch description, a background
 // re-render would tear down and rebuild that textarea's DOM node,
 // silently kicking focus out of it every poll cycle (every 5 seconds).
@@ -1033,9 +1042,26 @@ function submitPunchEdit(punchId){
   }
 }
 
+//Delete a punch item (punch list tab). It asks firstm then the item is gone
+//and the server is told who deleted it so it can keeo a recird of who and when,
+//and the next email reports it. Like every other change it is saved on the device
+//until the server confirms, so deleting works offline too.
 function deletePunchItem(punchId){
-  if(!confirm("Are you sure you want to permantley delete this item?")){ return; }
-
+  const p = punches.find(function(x){ return x.id === punchId; });
+  if(!p) return;
+  const what = String(p.description || '');
+  if(!confirm('Are you sure you want to delete this punch item?\n\n"' + (what.length > 100 ? what.slice(0, 100) + '...' : what) + '"This can\'t be undone.')) return;
+  const isLocal = String(p.id).indexOf('local-') === 0;
+  //An item that hasn't reached the server yet is known there, if at all, by the id it was created with.
+  const serverId = isLocal ? String(p.id).replace(/^local-/, '') : p.id;
+  if(isLocal) p.deletedLocally = true; //Lets a create that is still on its way be undone
+  punches = punches.filter(function(x){ return x !== p; });
+  if(editingPunchId === p.id){ editingPunchId = null; delete editDraftText[p.id]; }
+  delete pendingOps['resolve |' + p.id]; //Nothing left to resolve or edit
+  delete pendingOps['edit |' + p.id];
+  saveCache();
+  renderContent();
+  queueOp('delete', serverId, {by:techName || 'Unnamed tech', at: new Date().toISOString()});
 }
 
 // ---------- CSV export ----------
@@ -1488,6 +1514,7 @@ function sendOp(e){
   let req;
   if(e.kind === 'resolve') req = pushSetPunchStatus(e.id, e.data.status, e.data.by);
   else if(e.kind === 'edit') req = pushEditPunch(e.id, e.data.description, e.data.severity, e.data.ownership, e.data.by);
+  else if(e.kind === 'delete') req = pushDeletePunch(e.id, e.data.by);
   else req = pushEditNote(e.id, e.data.note);
   req.then(function(result){
     e.settledAt = ++checkClock;
@@ -1519,6 +1546,10 @@ function flushPendingOps(){
 function applyPendingOps(){
   Object.keys(pendingOps).forEach(function(k){
     const e = pendingOps[k];
+    if(e.kind === 'delete'){
+      punches = punches.filter(function(x){ return x.id !== e.id && x.id !== 'local-' + e.id; });
+      return;
+    }
     if(e.kind === 'note'){
       const d = DEVICE_BY_ID[e.id];
       if(d){ d.note = e.data.note; d.noteUpdatedBy = e.data.by; d.noteUpdatedAt = e.data.at; }
@@ -1549,6 +1580,7 @@ function sendPunch(item){
     item.id = res.id;
     delete item.clientId;
     item.syncedClock = ++checkClock;     // lets a poll that started before this keep the item instead of dropping it
+    if(item.deletedLocally){ queueOp('delete', item.id, {by: techName || 'Unnamed tech', at: new Date().toISOString()}); return; } //Deleted while it was on its way up
     // resolved while it was still waiting to go up: the status follows it
     if(item.status === 'resolved') queueOp('resolve', item.id, {status: 'resolved', by: item.resolvedBy || techName || 'Unnamed tech', at: item.resolvedAt || null});
     saveCache();
@@ -1724,6 +1756,9 @@ document.getElementById('content').addEventListener('click', function(e){
 
   const saveEditBtn = e.target.closest('#saveEditPunch');
   if(saveEditBtn){ submitPunchEdit(saveEditBtn.getAttribute('data-punch')); return; }
+ 
+  const deletePunchBtn = e.target.closest('[data-deletepunch]');
+  if(deletePunchBtn){ deletePunchItem(deletePunchBtn.getAttribute('data-deletepunch')); return; }
 
   const statusBtn = e.target.closest('.status-btn');
   if(statusBtn){ toggleResolve(statusBtn.getAttribute('data-punch')); return; }
