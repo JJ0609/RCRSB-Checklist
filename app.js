@@ -1050,7 +1050,7 @@ function deletePunchItem(punchId){
   const p = punches.find(function(x){ return x.id === punchId; });
   if(!p) return;
   const what = String(p.description || '');
-  if(!confirm('Are you sure you want to delete this punch item?\n\n"' + (what.length > 100 ? what.slice(0, 100) + '...' : what) + '"This can\'t be undone.')) return;
+  if(!confirm('Are you sure you want to delete this punch item?\n\n"' + (what.length > 100 ? what.slice(0, 100) + '...' : what) + '" This can\'t be undone.')) return;
   const isLocal = String(p.id).indexOf('local-') === 0;
   //An item that hasn't reached the server yet is known there, if at all, by the id it was created with.
   const serverId = isLocal ? String(p.id).replace(/^local-/, '') : p.id;
