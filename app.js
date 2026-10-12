@@ -567,8 +567,8 @@ function renderPunchList(){
         + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">'
         + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?'Mark resolved':'Resolved') + '</button>'
-        + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
-        + '<button class="btn delete" style="padding:4px 10px;font-size:11px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
+        + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;width:75px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
+        + '<button class="btn delete" style="padding:4px 10px;font-size:11px;width:75px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
         + '</div>'
         + '</div>';
     });
@@ -1031,6 +1031,11 @@ function submitPunchEdit(punchId){
   if(String(p.id).indexOf('local-') !== 0){
     queueOp('edit', p.id, {description: desc, severity: p.severity, ownership: p.ownership, by: techName || 'Unnamed tech'});
   }
+}
+
+function deletePunchItem(punchId){
+  if(!confirm("Are you sure you want to permantley delete this item?")){ return; }
+
 }
 
 // ---------- CSV export ----------
