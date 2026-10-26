@@ -4,6 +4,8 @@
   "description": "Power Design commissioning checklists and punch lists (static site plus a /health route)",
   "private": true,
   "scripts": {
+    "setup": "echo Nothing to install - this app has no dependencies",
+    "build": "echo Nothing to build - the site is plain files",
     "start": "node server.js"
   },
   "engines": {
