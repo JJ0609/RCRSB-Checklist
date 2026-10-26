@@ -13,7 +13,7 @@
 //     never intercepted: the app handles those itself, with its own saved data.
 //
 // Bump VERSION when the list of files below changes; old copies are then deleted.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'pd-app-' + VERSION;
 const PRECACHE = [
   "./",
@@ -29,7 +29,7 @@ const PRECACHE = [
   "login.js",
   "pwa.js",
   "offline.js",
-  "manifest.webmanifest",
+  "app.webmanifest",
   "vendor/exceljs.min.js",
   "icons/icon-192.png",
   "icons/icon-512.png",
