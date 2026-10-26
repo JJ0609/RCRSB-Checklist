@@ -1,0 +1,12 @@
+{
+  "name": "commissioning-site",
+  "version": "1.0.0",
+  "description": "Power Design commissioning checklists and punch lists (static site plus a /health route)",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
