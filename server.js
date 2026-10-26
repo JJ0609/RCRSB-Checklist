@@ -150,8 +150,8 @@ async function health(req, res) {
   const status = results.indexOf('fail') !== -1 ? 'unhealthy' : results.indexOf('warn') !== -1 ? 'degraded' : 'healthy';
   sendJson(res, status === 'unhealthy' ? 503 : 200, {
     status,
-    name: 'Power Design Commissioning',
-    description: 'AV and LC commissioning checklists and punch lists.',
+    name: 'Commissioning Site',
+    description: 'Allows techs to easily test devices on site and make any notes of issues that may arise, while also allowing the office end to keep up to date with new information and find out about any issues that need to be addressed with a project.',
     version,
     checkedAt: new Date().toISOString(),
     checks,
