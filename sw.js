@@ -13,7 +13,7 @@
 //     never intercepted: the app handles those itself, with its own saved data.
 //
 // Bump VERSION when the list of files below changes; old copies are then deleted.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'pd-app-' + VERSION;
 const PRECACHE = [
   "./",
@@ -31,10 +31,10 @@ const PRECACHE = [
   "offline.js",
   "app.webmanifest",
   "vendor/exceljs.min.js",
-  "icons/icon-192.png",
-  "icons/icon-512.png",
-  "icons/icon-maskable-512.png",
-  "icons/apple-touch-icon.png",
+  "app-icons/icon-192.png",
+  "app-icons/icon-512.png",
+  "app-icons/icon-maskable-512.png",
+  "app-icons/apple-touch-icon.png",
   "power-design-logo-white.png",
   "power-design-logo-black.png",
   "fonts/jetbrains-mono-latin-400-normal.woff2",
