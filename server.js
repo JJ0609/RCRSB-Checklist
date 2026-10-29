@@ -7,6 +7,7 @@
 //   HTTPS_PORT   also serve HTTPS on this port (needs TLS_KEY and TLS_CERT) - installing the app and offline mode need HTTPS
 //   TLS_KEY / TLS_CERT   paths to the certificate's key and certificate files
 //   BACKEND_URL  the Worker's address, if you don't want it read from config.js
+//   BACKEND_INTERVAL_MS / BACKEND_TIMEOUT_MS / BACKEND_FAILS_BEFORE_DOWN / BACKEND_STALE_MS  how the Worker is checked (see below)
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -109,33 +110,80 @@ function iconsCheck() {
   return { icons: wanted.length };
 }
 
-// The Worker (and the database behind it) is what makes the pages useful. Asking it every time someone
-// refreshes the dashboard would add up, so the answer is reused for 30 seconds.
-let backendCache = { at: 0, result: null };
+// ---------- the Worker check ----------
+// The Worker (and the database behind it) is what makes the pages useful. The dashboard times how long /health
+// takes and gives up on a slow answer, so /health never waits for the Worker: a timer asks it in the background
+// every 30 seconds, and /health reports the latest result straight away.
+//
+// One slow or failed answer is not "down". A problem that could be a blip (no answer, a connection error, a 5xx)
+// only counts as down after 3 in a row, about 90 seconds. Recovery shows at once. A problem that can't be a blip
+// (a 404, no Worker address) shows immediately.
+const BACKEND_INTERVAL_MS = Number(process.env.BACKEND_INTERVAL_MS) || 30000;           // how often the Worker is asked
+const BACKEND_TIMEOUT_MS = Number(process.env.BACKEND_TIMEOUT_MS) || 20000;             // how long one answer may take
+const BACKEND_FAILS_BEFORE_DOWN = Number(process.env.BACKEND_FAILS_BEFORE_DOWN) || 3;   // failures in a row before it counts as down
+const BACKEND_STALE_MS = Number(process.env.BACKEND_STALE_MS) || BACKEND_INTERVAL_MS * 4;   // a result older than this is flagged
+
+let published = { status: 'warn', durationMs: 0, error: 'waiting for the first check' };   // what /health reports
+let failuresInARow = 0, lastFailure = '', lastCheckAt = 0, checking = false;
+
 function workerAddress() {
   if (process.env.BACKEND_URL) return process.env.BACKEND_URL;
   try { return (read('config.js').match(/https:\/\/[A-Za-z0-9._-]+\.workers\.dev/) || [])[0] || ''; } catch (e) { return ''; }
 }
-async function backendCheck() {
-  if (backendCache.result && Date.now() - backendCache.at < 30000) return backendCache.result;
-  const api = "https://rcrsb-commissioning-sync.jjcampbell06092004.workers.dev/" //workerAddress();
+const seconds = (ms) => { const n = Math.round(ms / 1000); return n + ' second' + (n === 1 ? '' : 's'); };
+
+async function runBackendCheck() {
+  const api = workerAddress().replace(/\/+$/, '');
   const started = Date.now();
+  if (!api) return { status: 'fail', durationMs: 0, error: 'no Worker address found in config.js' };
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), BACKEND_TIMEOUT_MS);
+  try {
+    const r = await fetch(api + '/health', { signal: ctl.signal });
+    await r.arrayBuffer();
+    if (r.ok) return { status: 'pass', durationMs: Date.now() - started };
+    return { status: 'fail', durationMs: Date.now() - started, error: 'HTTP ' + r.status, transient: r.status >= 500 };
+  } catch (e) {
+    return { status: 'fail', durationMs: Date.now() - started, transient: true, error: e.name === 'AbortError' ? 'no answer within ' + seconds(BACKEND_TIMEOUT_MS) : 'could not connect' };
+  } finally { clearTimeout(timer); }
+}
+
+async function checkBackend() {
+  if (checking) return;   // never two at once
+  checking = true;
   let result;
-  if (!api) {
-    result = { status: 'fail', durationMs: 0, error: 'no Worker address found in config.js' };
-  } else {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 40000);
-    try {
-      const r = await fetch(api); //+ '/api/projects?deviceType=av', { signal: ctl.signal });
-      await r.arrayBuffer();
-      result = r.ok ? { status: 'pass', durationMs: Date.now() - started } : { status: 'fail', durationMs: Date.now() - started, error: 'HTTP ' + r.status };
-    } catch (e) {
-      result = { status: 'fail', durationMs: Date.now() - started, error: e.name === 'AbortError' ? 'timed out after 8 seconds' : 'could not connect' };
-    } finally { clearTimeout(timer); }
+  try { result = await runBackendCheck(); }
+  catch (e) { result = { status: 'fail', durationMs: 0, error: 'the check could not run', transient: true }; }
+  finally { checking = false; }
+  lastCheckAt = Date.now();
+  if (result.status === 'pass') {
+    failuresInARow = 0; lastFailure = '';
+    published = { status: 'pass', durationMs: result.durationMs };
+    return;
   }
-  backendCache = { at: Date.now(), result };
-  return result;
+  failuresInARow++; lastFailure = result.error;
+  if (!(result.transient && failuresInARow < BACKEND_FAILS_BEFORE_DOWN)) published = { status: 'fail', durationMs: result.durationMs, error: result.error };
+}
+
+// What /health shows for the Worker. It never waits, and it says how fresh the answer is.
+function backendCheck() {
+  const out = Object.assign({}, published);
+  const age = lastCheckAt ? Math.round((Date.now() - lastCheckAt) / 1000) : null;
+  if (age !== null) out.ageSeconds = age;
+  if (failuresInARow) {
+    out.failuresInARow = failuresInARow;
+    if (out.status !== 'fail') out.lastError = lastFailure;   // still showing the last good answer, but say what went wrong since
+  }
+  if (lastCheckAt && Date.now() - lastCheckAt > BACKEND_STALE_MS && out.status !== 'fail') {   // the timer should have run by now
+    out.status = 'warn';
+    out.error = 'the last check was ' + seconds(Date.now() - lastCheckAt) + ' ago';
+  }
+  return out;
+}
+
+function startBackendChecks() {
+  checkBackend();                                      // right away, so the first /health already has an answer
+  setInterval(checkBackend, BACKEND_INTERVAL_MS);
 }
 
 async function health(req, res) {
@@ -143,7 +191,7 @@ async function health(req, res) {
     pages: timed(pagesCheck),
     manifest: asWarning(timed(manifestCheck)),
     icons: asWarning(timed(iconsCheck)),
-    backend: await backendCheck()
+    backend: backendCheck()
   };
   // A failed check makes the app unhealthy; a warning only makes it degraded (same rule as the dashboard)
   const results = Object.values(checks).map((c) => c.status);
@@ -171,6 +219,7 @@ function handler(req, res) {
 }
 
 http.createServer(handler).listen(PORT, () => console.log('Commissioning site on http://0.0.0.0:' + PORT));
+startBackendChecks();
 
 if (HTTPS_PORT) {
   try {
