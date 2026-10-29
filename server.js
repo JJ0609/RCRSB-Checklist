@@ -125,7 +125,7 @@ async function backendCheck() {
     result = { status: 'fail', durationMs: 0, error: 'no Worker address found in config.js' };
   } else {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 8000);
+    const timer = setTimeout(() => ctl.abort(), 80000);
     try {
       const r = await fetch(api + '/api/projects?deviceType=av', { signal: ctl.signal });
       await r.arrayBuffer();
