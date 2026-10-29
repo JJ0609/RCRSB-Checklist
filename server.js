@@ -118,7 +118,7 @@ function workerAddress() {
 }
 async function backendCheck() {
   if (backendCache.result && Date.now() - backendCache.at < 30000) return backendCache.result;
-  const api = workerAddress();
+  const api = "https://rcrsb-commissioning-sync.jjcampbell06092004.workers.dev/" //workerAddress();
   const started = Date.now();
   let result;
   if (!api) {
@@ -127,7 +127,7 @@ async function backendCheck() {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 40000);
     try {
-      const r = await fetch(api + '/api/projects?deviceType=av', { signal: ctl.signal });
+      const r = await fetch(api); //+ '/api/projects?deviceType=av', { signal: ctl.signal });
       await r.arrayBuffer();
       result = r.ok ? { status: 'pass', durationMs: Date.now() - started } : { status: 'fail', durationMs: Date.now() - started, error: 'HTTP ' + r.status };
     } catch (e) {
