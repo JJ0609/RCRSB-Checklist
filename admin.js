@@ -318,6 +318,7 @@ document.getElementById('projectList').addEventListener('change', async function
       }
 
       confirmMsg += 'Punch list history is never deleted, even for a removed device. This can\'t be undone otherwise.';
+      confirmMsg += notesText(newDevices);
 
       if(!confirm(confirmMsg)){
         syncFileInput.value = '';
@@ -369,7 +370,8 @@ document.getElementById('projectList').addEventListener('change', async function
       'This adds new devices and updates matching existing ones (by device ID). ' +
       'It will NOT delete any device or touch existing checklist/punch data - ' +
       'even devices missing from this file are left as-is. ' +
-      (typeLabel === 'LC' ? 'AV devices in this project are never affected.' : 'LC devices in this project are never affected.')
+      (typeLabel === 'LC' ? 'AV devices in this project are never affected.' : 'LC devices in this project are never affected.') +
+      notesText(devices)
     )){
       fileInput.value = '';
       btn.disabled = false;
@@ -798,6 +800,9 @@ function parseDeviceReportForSync(workbook){
       else if(h === 'network') found.network = c;
       else if(h === 'function') found.function = c;
       else if(h === 'note') found.note = c;
+      else if(h === 'category') found.category = c;
+      else if(h === 'order') found.sortOrder = c;
+      else if(h === 'mac' || h === 'macaddress') found.mac = c;
       else if(h === 'cresnetid') found.cresnetId = c;
       else if(h === 'dinrail') found.dinRail = c;
       else if(h === 'processor' || h === 'controller') found.controller = c;
@@ -839,6 +844,9 @@ function parseDeviceReportForSync(workbook){
       controller: f('controller'),
       dinRail: f('dinRail'),
       connection: f('connection'),
+      category: f('category'),
+      sortOrder: f('sortOrder'),
+      mac: f('mac'),
       power: parseCheckLabelXlsx(cellStr(r, cols.power)),
       network: parseCheckLabelXlsx(cellStr(r, cols.network)),
       function: parseCheckLabelXlsx(cellStr(r, cols.function))
@@ -915,7 +923,330 @@ function parsePunchListForSync(workbook){
   return punches;
 }
 
+// ---------- the "extracted tables" workbook (made from the PDF drawings) ----------
+// Another tool reads the equipment tables off the drawings and writes a workbook with two
+// sheets, here called "Device Report" and "Component Info":
+//   Device Report  - devices placed in rooms:  COMPONENT NAME, LEVEL, ROOM #, ROOM NAME,
+//                    DESIGNATION & DESCRIPTION, MANUFACTURER, MODEL, RACK
+//   Component Info - the rack equipment list:  EQUIP. MARK, MANUFACTURER, MODEL, WATTS, AMPS, BTU
+// Neither is an Info Sheet on its own, so they are read TOGETHER and turned into the device
+// list a hand-made Info Sheet would give:
+//   - a device in both sheets is listed once (the rack-mounted touch panels are in both);
+//   - the one touch panel that is in both sheets for each rack (R1-..., R2-...) tells us where
+//     that rack is, and every other piece of equipment in the rack (R1-AMP-01 ...) gets that
+//     location, written the way the existing Info Sheets write it: "<rack> <room name> RM <room #>"
+//     (1.H EER 2 RM 1406), or "<rack> <room name> <room #>" when the room name has no digit of
+//     its own (2.H IDF 1434);
+//   - a device that is only in a room (a wall touch panel) gets just the room name, with the room
+//     number in its note;
+//   - manufacturer + model are joined ("QSC CX-Q 4K8"); power figures (watts/amps/BTU) are not kept;
+//   - total rows are ignored, and equipment that isn't a network device is left out.
+// What was combined, skipped or cleaned is reported back as notes (devices.notes), so nothing
+// changes silently.
+const EXTRACTED_SKIP_TYPES = ['SUR'];   // type codes (the middle of R1-SUR-01) that are NOT network devices: surge protectors
+function xKey(s){ return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+// Finds the header row of one sheet (within its first rows) and reads the rows under it.
+function readExtractedSheet(ws){
+  const grid = XLSX.utils.sheet_to_json(ws, {header: 1, defval: '', raw: false, blankrows: false});
+  const NAME_KEYS = ['componentname', 'equipmark', 'equipmentmark', 'devicename'];
+  for(let r = 0; r < Math.min(grid.length, 10); r++){
+    const keys = grid[r].map(xKey);
+    const nameCol = keys.findIndex(function(k){ return NAME_KEYS.indexOf(k) !== -1; });
+    if(nameCol === -1) continue;
+    const find = function(list){ for(let i = 0; i < keys.length; i++){ if(list.indexOf(keys[i]) !== -1) return i; } return -1; };
+    const cols = {
+      name: nameCol, level: find(['level']), roomNo: find(['room', 'roomno', 'roomnumber']), roomName: find(['roomname']),
+      desc: find(['designationdescription', 'designation', 'description']), mfr: find(['manufacturer', 'mfr', 'make']),
+      model: find(['model', 'modelnumber', 'modelno']), rack: find(['rack'])
+    };
+    const rows = [];
+    for(let i = r + 1; i < grid.length; i++){
+      const g = grid[i];
+      const get = function(c){ return c === -1 ? '' : String(g[c] == null ? '' : g[c]).replace(/\s+/g, ' ').trim(); };
+      rows.push({name: get(cols.name), level: get(cols.level), roomNo: get(cols.roomNo), roomName: get(cols.roomName), desc: get(cols.desc), mfr: get(cols.mfr), model: get(cols.model), rack: get(cols.rack)});
+    }
+    return {
+      rows: rows,
+      placed: cols.roomName !== -1 || cols.rack !== -1,   // devices placed in rooms
+      equipMark: keys.indexOf('equipmark') !== -1 || keys.indexOf('equipmentmark') !== -1
+    };
+  }
+  return null;
+}
+// Which sheets are the "placed in rooms" list and which are the equipment list. Anything
+// else (a normal Info Sheet, the app's own export) gives neither and is left to the normal reader.
+function readExtractedTables(workbook){
+  const placed = [], equip = [];
+  workbook.SheetNames.forEach(function(n){
+    const t = readExtractedSheet(workbook.Sheets[n]);
+    if(!t) return;
+    t.sheet = n;
+    if(t.placed) placed.push(t);
+    else if(t.equipMark || xKey(n) === 'componentinfo') equip.push(t);
+  });
+  return {placed: placed, equip: equip};
+}
+function looksLikeExtractedTables(workbook){
+  const t = readExtractedTables(workbook);
+  return t.placed.length > 0 || t.equip.some(function(x){ return x.equipMark; });
+}
+function parseExtractedTables(workbook){
+  if(!looksLikeExtractedTables(workbook)) return null;
+  const tables = readExtractedTables(workbook);
+  const notes = [];
+  let doubled = 0, totalRows = 0;
+  const usable = function(row){
+    if(!row.name) return false;
+    if(/^(grand\s+)?total\b/i.test(row.name)){ totalRows++; return false; }
+    return true;
+  };
+  const placedRows = [], equipRows = [];
+  tables.placed.forEach(function(t){ t.rows.forEach(function(r){ if(usable(r)) placedRows.push(r); }); });
+  tables.equip.forEach(function(t){ t.rows.forEach(function(r){ if(usable(r)) equipRows.push(r); }); });
+  // The drawing extraction sometimes reads a label twice ("14061406", "E.E.R 2EER 2"): collapse an exact repeat.
+  const unDouble = function(s){
+    const m = s.match(/^(.{3,}?)\s?\1$/);
+    if(m){ doubled++; return m[1]; }
+    return s;
+  };
+  const cleanRoomName = function(s){ return unDouble(s.replace(/\./g, '').replace(/\s+/g, ' ').trim()); };
+  const cleanRoomNo = function(s){ return unDouble(s.trim()); };
+  const cleanRack = function(s){ return s.replace(/^AV\s*RACK\s*/i, '').trim(); };
+  const cleanLevel = function(s){ return s.replace(/\b0+(\d)/g, '$1').trim(); };
+  const roomLabel = function(name, no){
+    if(!no) return name;
+    if(!name) return 'RM ' + no;
+    return /\d/.test(name) ? name + ' RM ' + no : name + ' ' + no;
+  };
+  const typeOf = function(name){ const m = name.toUpperCase().match(/^R\d+-([A-Z]+)\d*-\d+/); return m ? m[1] : ''; };
+  const rackNo = function(name){ const m = name.match(/^R(\d+)-/i); return m ? m[1] : ''; };
+  const placedByName = {};
+  placedRows.forEach(function(r){ const k = r.name.toUpperCase(); if(!placedByName[k]) placedByName[k] = r; });
+  const equipNames = {}, mfrForModel = {};
+  equipRows.forEach(function(r){
+    equipNames[r.name.toUpperCase()] = true;
+    if(r.model && r.mfr && !mfrForModel[r.model.toUpperCase()]) mfrForModel[r.model.toUpperCase()] = r.mfr;
+  });
+  // Where each rack is: the touch panel that is in BOTH sheets is the one in the rack's own room.
+  const racks = {};
+  equipRows.forEach(function(e){
+    const p = placedByName[e.name.toUpperCase()], n = rackNo(e.name);
+    if(!p || !n || racks[n]) return;
+    const room = roomLabel(cleanRoomName(p.roomName), cleanRoomNo(p.roomNo));
+    racks[n] = {id: cleanRack(p.rack), room: room, level: cleanLevel(p.level)};
+  });
+  const joinModel = function(mfr, model){
+    if(!model) return mfr;
+    if(!mfr) return model;
+    return model.toUpperCase().indexOf(mfr.toUpperCase()) === 0 ? model : mfr + ' ' + model;
+  };
+  const skipped = {};
+  const devices = [];
+  let inBoth = 0;
+  const addDevice = function(e, p){
+    const name = (e || p).name, type = typeOf(name);
+    if(EXTRACTED_SKIP_TYPES.indexOf(type) !== -1){ skipped[type] = (skipped[type] || 0) + 1; return; }
+    const n = rackNo(name), rack = n ? racks[n] : null;
+    let location, level, noteParts = [];
+    if(e){   // rack equipment: it lives in the rack
+      location = rack ? (rack.id ? rack.id + ' ' : '') + rack.room : (n ? 'RACK ' + n : '');
+      level = p ? cleanLevel(p.level) : (rack ? rack.level : '');
+      if(p){ if(p.desc) noteParts.push(p.desc); noteParts.push('Rack mounted'); }
+    }else{   // only in a room (a wall touch panel, say)
+      location = cleanRoomName(p.roomName) || roomLabel('', cleanRoomNo(p.roomNo));
+      level = cleanLevel(p.level);
+      if(p.desc) noteParts.push(p.desc);
+      const no = cleanRoomNo(p.roomNo);
+      if(no) noteParts.push('RM ' + no);
+    }
+    devices.push({
+      name: name, status: '', level: level, location: location, zone: '', channel: '',
+      model: joinModel((e && e.mfr) || (p && mfrForModel[(p.model || '').toUpperCase()]) || (p && p.mfr) || '', (e && e.model) || (p && p.model) || ''),
+      ip: '', ipid: '', avio: '', note: noteParts.join(' | '), ports: []
+    });
+    if(e && p) inBoth++;
+  };
+  equipRows.forEach(function(e){ addDevice(e, placedByName[e.name.toUpperCase()] || null); });
+  placedRows.forEach(function(p){ if(!equipNames[p.name.toUpperCase()]) addDevice(null, p); });
+  if(!devices.length) throw new Error('No devices found in the extracted tables (' + tables.placed.concat(tables.equip).map(function(t){ return t.sheet; }).join(', ') + ').');
+  // The same name twice would be two identical cards; keep both (they are separate rows on the drawing) but tell the two apart.
+  const garbled = [];
+  devices.forEach(function(d){
+    const model = d.model.replace(/^\S+\s/, ''), seenTok = {};
+    const bad = model.toUpperCase().split(/[\s-]+/).some(function(tok){ if(tok.length < 3) return false; if(seenTok[tok]) return true; seenTok[tok] = true; return false; });
+    if(bad) garbled.push(d.name + ' (' + d.model + ')');
+  });
+  const seenNames = {}, duplicated = [];
+  devices.forEach(function(d){
+    const k = d.name.toUpperCase();
+    seenNames[k] = (seenNames[k] || 0) + 1;
+    if(seenNames[k] > 1){ duplicated.push(d.name); d.name = d.name + ' (' + seenNames[k] + ')'; }
+  });
+  notes.push('Read ' + placedRows.length + ' device' + (placedRows.length === 1 ? '' : 's') + ' placed in rooms and ' + equipRows.length + ' piece' + (equipRows.length === 1 ? '' : 's') + ' of rack equipment.');
+  if(inBoth) notes.push(inBoth + ' device' + (inBoth === 1 ? ' was' : 's were') + ' in both lists and ' + (inBoth === 1 ? 'is' : 'are') + ' listed once.');
+  Object.keys(skipped).forEach(function(type){ notes.push('Left out ' + skipped[type] + ' "' + type + '" item' + (skipped[type] === 1 ? '' : 's') + ' (not network devices).'); });
+  if(totalRows) notes.push('Ignored ' + totalRows + ' total row' + (totalRows === 1 ? '' : 's') + '.');
+  const rackNums = Object.keys(racks).sort(function(a, b){ return Number(a) - Number(b); });
+  if(rackNums.length) notes.push('Rack locations came from the touch panel in each rack: ' + rackNums.map(function(n){ return 'R' + n + ' = ' + (racks[n].id ? racks[n].id + ' ' : '') + racks[n].room; }).join('; ') + '.');
+  const noRack = devices.filter(function(d){ return /^RACK \d+$/.test(d.location); }).length;
+  if(noRack) notes.push(noRack + ' piece' + (noRack === 1 ? '' : 's') + ' of rack equipment ha' + (noRack === 1 ? 's' : 've') + ' no touch panel to say which room its rack is in, so ' + (noRack === 1 ? 'it shows' : 'they show') + ' "RACK n" as the location.');
+  if(doubled) notes.push('Fixed ' + doubled + ' room name' + (doubled === 1 ? '' : 's') + '/number' + (doubled === 1 ? '' : 's') + ' that the drawing extraction had read twice (like "14061406").');
+  if(garbled.length) notes.push('Check the model on ' + garbled.slice(0, 4).join(', ') + (garbled.length > 4 ? ' and ' + (garbled.length - 4) + ' more' : '') + ' - it looks garbled by the drawing extraction.');
+  if(duplicated.length) notes.push('The same name appears more than once: ' + Array.from(new Set(duplicated)).join(', ') + '. The repeats are shown as (2), (3) - worth correcting on the drawing.');
+  const seen = {};
+  devices.forEach(function(d){
+    const base = slugify(d.name) || 'device';
+    const k = seen[base] || 0;
+    seen[base] = k + 1;
+    d.id = k === 0 ? base : (base + '-' + (k + 1));
+    d.location = normalizeLocation(d.location);
+  });
+  devices.notes = notes;
+  return devices;
+}
+// What the reader did to a file that needed interpreting (combined sheets, skipped rows, fixed text),
+// as lines for a confirmation dialog.
+function notesText(devices){
+  return (devices && devices.notes && devices.notes.length) ? '\n\nNotes on this file:\n- ' + devices.notes.join('\n- ') : '';
+}
+// ---------- the "Commissioning" tab ----------
+// The current Info Sheet has one tab that is already the commissioning checklist: a flat list, grouped by room
+// and in walking order, with the columns
+//   Order | Level | Room | Category | Name | Make | Model | IP | MAC | ID | Zone | Ch | Switch Port | Note
+// (Make | Model, IP, MAC and ID are formulas that look the device up on the Component Info tab.) It is read
+// BY ITS HEADERS, so it can be renamed or have columns moved. Only this tab is read: nothing from the other tabs
+// (Component Info carries login details) is ever imported, and the switch ports come from the Switch Port column,
+// so the Port Map tabs are not needed.
+//
+// What it becomes:
+//   Order -> sortOrder (kept as text, "0101", so the sheet's own order survives and sorts correctly)
+//   Room -> location          Category -> category (control / audio / video; anything else is left blank)
+//   ID -> ipid (the "IP ID " prefix is dropped)     Ch -> channel     Switch Port -> ports
+// Audio rows are of two kinds: devices (amps, DSPs - they have a model and an IP) and speaker ZONES (a zone
+// number and an amp output, nothing else). Zone names repeat ("POOL AREA" nine times), so a zone's id is built
+// from its name AND its zone number - an id made from the name alone would be told apart only by position, and
+// re-uploading after a row was inserted would move saved test results onto the wrong zone.
+const COMMISSIONING_HEADERS = {
+  order: 'order', level: 'level', room: 'room', category: 'category', name: 'name',
+  makemodel: 'model', model: 'model', ip: 'ip', ipaddress: 'ip', mac: 'mac', macaddress: 'mac',
+  id: 'ipid', ipid: 'ipid', zone: 'zone', ch: 'channel', channel: 'channel', switchport: 'ports', note: 'note'
+};
+const COMMISSIONING_CATEGORIES = [['control', 'Control'], ['audio', 'Audio'], ['video', 'Video']];
+const MAC_PATTERN = /^(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}$|^[0-9a-f]{12}$|^(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}$/i;
+// The tab, found by its header row (a tab called "Commissioning" is tried first).
+function findCommissioningSheet(workbook){
+  const names = workbook.SheetNames.slice().sort(function(a, b){ return (xKey(b) === 'commissioning' ? 1 : 0) - (xKey(a) === 'commissioning' ? 1 : 0); });
+  for(let n = 0; n < names.length; n++){
+    const ws = workbook.Sheets[names[n]];
+    if(!ws || !ws['!ref']) continue;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 9); r++){
+      const cols = {};
+      for(let c = range.s.c; c <= Math.min(range.e.c, range.s.c + 40); c++){
+        const cell = ws[XLSX.utils.encode_cell({r: r, c: c})];
+        const field = COMMISSIONING_HEADERS[xKey(cell ? cell.v : '')];
+        if(field && cols[field] === undefined) cols[field] = c;
+      }
+      if(cols.name !== undefined && cols.room !== undefined && cols.category !== undefined){
+        return {name: names[n], ws: ws, headerRow: r, cols: cols, range: range};
+      }
+    }
+  }
+  return null;
+}
+// "R1-SWI-01 / Port 2" -> [{switch: "R1-SWI-01", port: "2"}]; several can be separated by , or ;
+function parseSwitchPorts(text){
+  if(!text) return {ports: [], odd: false};
+  let odd = false;
+  const ports = text.split(/\s*[;,]\s*/).filter(Boolean).slice(0, 20).map(function(part){
+    const m = part.match(/^(.*?)\s*\/\s*(?:port\s*)?(\S+)$/i);
+    if(!m){ odd = true; return {switch: part, port: null, cable_label: null, mode: null, vlans: null}; }
+    return {switch: m[1].trim(), port: m[2], cable_label: null, mode: null, vlans: null};
+  });
+  return {ports: ports, odd: odd};
+}
+function parseCommissioningSheet(workbook){
+  const found = findCommissioningSheet(workbook);
+  if(!found) return null;
+  const ws = found.ws, cols = found.cols;
+  // Text as it is displayed (a number formatted 0000 keeps its zeros), tidied.
+  const text = function(r, c){
+    if(c === undefined) return '';
+    const cell = ws[XLSX.utils.encode_cell({r: r, c: c})];
+    if(!cell || cell.v == null) return '';
+    return String(cell.t === 'n' && cell.w != null ? cell.w : cell.v).replace(/\s+/g, ' ').trim();
+  };
+  const devices = [];
+  const unknownCats = {}, badMacs = [], oddPorts = [];
+  let noCategory = 0, formulasWithoutResult = 0;
+  for(let r = found.headerRow + 1; r <= found.range.e.r; r++){
+    const name = text(r, cols.name);
+    if(!name) continue;
+    // A formula whose result was never saved reads as blank - say so rather than import blanks quietly.
+    Object.keys(cols).forEach(function(k){
+      const cell = ws[XLSX.utils.encode_cell({r: r, c: cols[k]})];
+      if(cell && cell.f !== undefined && cell.v === undefined) formulasWithoutResult++;
+    });
+    let order = text(r, cols.order);
+    if(/^\d+$/.test(order) && order.length < 4) order = ('0000' + order).slice(-4);
+    const catRaw = text(r, cols.category), catKey = catRaw.toLowerCase();
+    const known = COMMISSIONING_CATEGORIES.some(function(c){ return c[0] === catKey; });
+    const category = known ? catKey : '';
+    if(!catRaw) noCategory++; else if(!known) unknownCats[catRaw] = (unknownCats[catRaw] || 0) + 1;
+    let mac = text(r, cols.mac);
+    if(mac && !MAC_PATTERN.test(mac)){ badMacs.push(name + ': "' + mac + '"'); mac = ''; }
+    const sp = parseSwitchPorts(text(r, cols.ports));
+    if(sp.odd) oddPorts.push(name);
+    devices.push({
+      name: name, status: '', level: text(r, cols.level), location: normalizeLocation(text(r, cols.room)),
+      zone: text(r, cols.zone), channel: text(r, cols.channel), model: text(r, cols.model), ip: text(r, cols.ip),
+      ipid: text(r, cols.ipid).replace(/^IP\s*ID\s*/i, ''), avio: '', note: text(r, cols.note),
+      category: category, sortOrder: order, mac: mac, ports: sp.ports
+    });
+  }
+  if(!devices.length) throw new Error('The "' + found.name + '" tab has a header row but no devices below it.');
+  // Ids. A speaker zone is told apart by its zone number; anything else that still repeats gets -2, -3.
+  const isZone = function(d){ return d.category === 'audio' && !!d.zone && !d.model && !d.ip; };
+  const seen = {};
+  devices.forEach(function(d){
+    const base = slugify(isZone(d) ? d.name + ' ' + d.zone : d.name) || 'device';
+    const n = seen[base] || 0;
+    seen[base] = n + 1;
+    d.id = n === 0 ? base : (base + '-' + (n + 1));
+  });
+  // What was read, in words - shown before anything is uploaded.
+  const notes = [];
+  const count = {control: 0, audio: 0, video: 0, other: 0};
+  devices.forEach(function(d){ count[d.category || 'other']++; });
+  const zones = devices.filter(isZone).length;
+  const parts = COMMISSIONING_CATEGORIES.filter(function(c){ return count[c[0]]; }).map(function(c){
+    return c[1] + ' ' + count[c[0]] + (c[0] === 'audio' && zones ? ' (' + zones + ' speaker zones, ' + (count.audio - zones) + ' devices)' : '');
+  });
+  if(count.other) parts.push('no category ' + count.other);
+  const rooms = {}; devices.forEach(function(d){ rooms[d.location] = true; });
+  notes.push('Read ' + devices.length + ' rows in ' + Object.keys(rooms).length + ' rooms from the "' + found.name + '" tab: ' + parts.join(', ') + '.');
+  notes.push('Only this tab is read. Nothing from the other tabs (including any login details on them) is imported, and the switch ports come from its Switch Port column.');
+  const zoneNames = {};
+  devices.filter(isZone).forEach(function(d){ zoneNames[d.name] = (zoneNames[d.name] || 0) + 1; });
+  const repeated = Object.keys(zoneNames).filter(function(k){ return zoneNames[k] > 1; });
+  if(repeated.length) notes.push(repeated.length + ' speaker-zone names repeat (' + repeated.slice(0, 4).map(function(k){ return k + ' x' + zoneNames[k]; }).join(', ') + (repeated.length > 4 ? ', ...' : '') + '). Each zone has its own id from its zone number, so they stay separate when the sheet is uploaded again.');
+  const otherDupes = Object.keys(seen).filter(function(k){ return seen[k] > 1; });
+  if(otherDupes.length) notes.push(otherDupes.length + ' other name' + (otherDupes.length === 1 ? ' appears' : 's appear') + ' more than once (' + otherDupes.slice(0, 4).join(', ') + '); the repeats were numbered -2, -3. Worth making them unique in the sheet.');
+  if(Object.keys(unknownCats).length) notes.push('Category isn\'t Control, Audio or Video on ' + Object.keys(unknownCats).reduce(function(s, k){ return s + unknownCats[k]; }, 0) + ' row(s) (' + Object.keys(unknownCats).join(', ') + '); they are listed under "Other".');
+  if(noCategory) notes.push(noCategory + ' row' + (noCategory === 1 ? ' has' : 's have') + ' no Category and will be listed under "Other".');
+  if(badMacs.length) notes.push('The MAC column holds something that isn\'t a MAC address on ' + badMacs.length + ' row' + (badMacs.length === 1 ? '' : 's') + ' (' + badMacs.slice(0, 3).join('; ') + '); left blank.');
+  if(oddPorts.length) notes.push(oddPorts.length + ' Switch Port cell' + (oddPorts.length === 1 ? ' isn\'t' : 's aren\'t') + ' in the "switch / Port n" form (' + oddPorts.slice(0, 3).join(', ') + '); kept as text.');
+  const orders = devices.map(function(d){ return d.sortOrder; }).filter(Boolean);
+  if(orders.length && new Set(orders).size !== orders.length) notes.push('Some Order values repeat, so rooms and devices may not list in the sheet\'s order.');
+  if(formulasWithoutResult) notes.push('WARNING: ' + formulasWithoutResult + ' cells are formulas with no saved result, so they read as blank. Open the file in Excel, save it, and upload it again.');
+  devices.notes = notes;
+  return devices;
+}
 function parseWorkbook(workbook){
+  const commissioning = parseCommissioningSheet(workbook);
+  if(commissioning) return commissioning;
+  const extractedTables = parseExtractedTables(workbook);
+  if(extractedTables) return extractedTables;
   // Tolerates spacing variants ("Device Info", "DeviceInfo", "Device  Info")
   // but not typos or renamed sheets - those get a clear error listing what
   // sheet names actually exist, instead of a silent wrong match.
@@ -1236,7 +1567,7 @@ function parseLcsWorkbook(workbook){
 // side could mean the other type's devices go completely unnoticed.
 function detectDeviceType(workbook){
   const normalize = function(n){ return n.replace(/\s+/g, '').toLowerCase(); };
-  const hasAv = workbook.SheetNames.some(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo' || normalize(n) === 'devicereport'; });
+  const hasAv = workbook.SheetNames.some(function(n){ return normalize(n) === 'deviceinfo' || normalize(n) === 'componentinfo' || normalize(n) === 'devicereport'; }) || !!findCommissioningSheet(workbook) || looksLikeExtractedTables(workbook);
   const hasLc = workbook.SheetNames.some(function(n){ return n.trim().toLowerCase() === 'lcs devices'; });
   if(hasAv && hasLc){
     throw new Error('This file has both a "Device Info"-style sheet and an "LCS Devices" sheet - upload one file per type so it\'s clear which set of devices this is.');
@@ -1283,7 +1614,7 @@ document.getElementById('createBtn').addEventListener('click', async function(){
       body: JSON.stringify({id: id, name: name, shortName: shortName, region: region, devices: devices, deviceType: deviceType})
     });
 
-    showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' ' + typeLabel + ' devices.', 'ok');
+    showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' ' + typeLabel + ' devices.' + (devices.notes && devices.notes.length ? ' Notes on the file: ' + devices.notes.join(' ') : ''), 'ok');
     document.getElementById('newName').value = '';
     document.getElementById('newShort').value = '';
     document.getElementById('newId').value = '';

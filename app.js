@@ -13,6 +13,18 @@ const CHECKS = [
   {key:'network', label:'Network'},
   {key:'function', label:'Function'}
 ];
+// A room's devices are grouped into these sections (the Commissioning sheet's Category column). A device with
+// no category - an older project, or one added without choosing - goes under "Other".
+const CATEGORIES = [
+  {key: 'control', label: 'Control'},
+  {key: 'audio', label: 'Audio'},
+  {key: 'video', label: 'Video'}
+];
+// A speaker ZONE is an audio row that is a place rather than a piece of equipment: a zone number and an amp
+// output, no model and no IP. There is nothing to power up and nothing on the network, so the one thing to test
+// is that it plays - it gets a single check (Function) and counts as tested once that is done.
+function isZoneRow(d){ return !!d && d.category === 'audio' && !!d.zone && !d.model && !d.ip; }
+function checksFor(d){ return isZoneRow(d) ? CHECKS.filter(function(c){ return c.key === 'function'; }) : CHECKS; }
 const SEVERITIES = ['minor','major','critical'];
 const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration'];
 // Sentinel for the shared location-punch form/state below, meaning "no
@@ -128,8 +140,26 @@ function rebuildDeviceIndexes(){
     if(!map[d.location]) map[d.location] = [];
     map[d.location].push(d);
   });
-  LOCATIONS = Object.keys(map).sort().map(function(name){
-    return {name: name, devices: map[name]};
+  // The sheet's own order: devices inside a room by their Order code, and the rooms by the code of their first
+  // device (the order a tech walks the building). Anything without a code - an older project, or a device added
+  // in the field - lists after the ones that have one, and when NOTHING has a code nothing moves at all: the
+  // devices stay as received and the rooms stay alphabetical, exactly as before.
+  const byOrder = function(a, b){
+    const x = a.sortOrder || '', y = b.sortOrder || '';
+    if(x && y) return x < y ? -1 : (x > y ? 1 : 0);
+    if(x) return -1;
+    if(y) return 1;
+    return 0;
+  };
+  LOCATIONS = Object.keys(map).map(function(name){
+    const devices = map[name].slice().sort(byOrder);
+    const codes = devices.map(function(d){ return d.sortOrder || ''; }).filter(Boolean).sort();
+    return {name: name, devices: devices, order: codes[0] || ''};
+  }).sort(function(a, b){
+    if(a.order && b.order && a.order !== b.order) return a.order < b.order ? -1 : 1;
+    if(a.order && !b.order) return -1;
+    if(!a.order && b.order) return 1;
+    return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
   });
   DEVICE_BY_ID = {};
   DEVICES.forEach(function(d){ DEVICE_BY_ID[d.id] = d; });
@@ -170,11 +200,11 @@ function getCheck(deviceId){
 }
 function isTested(deviceId){
   const c = getCheck(deviceId);
-  return c.power && c.network && c.function;
+  return checksFor(DEVICE_BY_ID[deviceId]).every(function(chk){ return !!c[chk.key]; });
 }
 function hasFail(deviceId){
   const c = getCheck(deviceId);
-  return c.power === 'fail' || c.network === 'fail' || c.function === 'fail';
+  return checksFor(DEVICE_BY_ID[deviceId]).some(function(chk){ return c[chk.key] === 'fail'; });
 }
 function locationStats(devices){
   let tested = 0, fails = 0;
@@ -203,7 +233,7 @@ function overallStats(){
   DEVICES.forEach(function(d){
     if(isTested(d.id)) tested++;
     const c = getCheck(d.id);
-    [c.power,c.network,c.function].forEach(function(v){ if(v==='fail') failCount++; });
+    checksFor(d).forEach(function(chk){ if(c[chk.key] === 'fail') failCount++; });
   });
   const open = punches.filter(function(p){ return p.status==='open'; }).length;
   return {tested: tested, total: DEVICES.length, failChecks: failCount, open: open};
@@ -231,7 +261,7 @@ function renderLocations(){
   if(q){
     locs = LOCATIONS.filter(function(loc){
       if(matchesSearch(loc.name)) return true;
-      return loc.devices.some(function(d){ return matchesSearch(d.name) || matchesSearch(d.model) || matchesSearch(d.cresnetId || '') || matchesSearch(d.controller || ''); });
+      return loc.devices.some(deviceMatchesSearch);
     });
   }
   html += '<div class="section-label">' + locs.length + ' location' + (locs.length===1?'':'s') + '</div>';
@@ -286,13 +316,68 @@ function portSummary(dev){
   }).join(', ');
 }
 
+function deviceMatchesSearch(d){
+  return matchesSearch(d.name) || matchesSearch(d.model) || matchesSearch(d.cresnetId || '') || matchesSearch(d.controller || '')
+    || matchesSearch(d.zone || '') || matchesSearch(d.channel || '') || matchesSearch(d.ip || '') || matchesSearch(d.mac || '');
+}
+
+// Which sections the person has opened or closed, per room. It is kept HERE and not in the page, because the
+// whole screen is rebuilt on every check tap and a section that only remembered its state in the page would
+// snap shut after each one. Remembered for the browser session, so it survives a reload too.
+let openSections = {};   // 'ROOM|control' -> true / false (what they chose); absent = the default
+function sectionsKey(){ return 'pd_sections_' + currentProject + '_' + DEVICE_TYPE; }
+function loadOpenSections(){
+  try{ openSections = JSON.parse(sessionStorage.getItem(sectionsKey()) || '{}') || {}; }catch(e){ openSections = {}; }
+}
+function saveOpenSections(){
+  try{ sessionStorage.setItem(sectionsKey(), JSON.stringify(openSections)); }catch(e){}
+}
+
+// A room's devices split into the sections on its page, in a fixed order, empty ones left out. A device with no
+// category goes under "Other". A room where NO device has a category (an older project) is not split at all,
+// so those pages look exactly as they always did.
+function sectionsFor(devices){
+  if(!devices.some(function(d){ return !!d.category; })) return null;
+  const groups = CATEGORIES.map(function(c){ return {key: c.key, label: c.label, devices: []}; });
+  const other = {key: 'other', label: 'Other', devices: []};
+  devices.forEach(function(d){
+    const g = groups.find(function(x){ return x.key === d.category; });
+    (g || other).devices.push(d);
+  });
+  return groups.concat([other]).filter(function(g){ return g.devices.length; });
+}
+
+function sectionHtml(g, open){
+  const st = locationStats(g.devices);
+  const ids = {};
+  g.devices.forEach(function(d){ ids[d.id] = true; });
+  const openPunch = punches.filter(function(p){ return p.status === 'open' && p.deviceId && ids[p.deviceId]; }).length;
+  let html = '<div class="cat-section" style="margin-top:10px;">';
+  html += '<button type="button" class="cat-head" data-cat-toggle="' + esc(g.key) + '" aria-expanded="' + (open ? 'true' : 'false') + '" style="width:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 13px;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;cursor:pointer;color:var(--ink);font-family:inherit;text-align:left;">'
+    + '<span aria-hidden="true" style="font-size:12px;width:12px;color:var(--ink-soft);">' + (open ? '&#9662;' : '&#9656;') + '</span> '
+    + '<span style="font-family:\'Libre Franklin\',sans-serif;font-weight:800;font-size:15px;">' + esc(g.label) + '</span> '
+    + '<span style="font-size:12px;color:var(--ink-soft);">' + g.devices.length + ' item' + (g.devices.length === 1 ? '' : 's') + '</span> '
+    + '<span style="font-size:12px;color:var(--ink-soft);margin-left:auto;">' + st.tested + '/' + st.total + ' tested</span>'
+    + (st.fails ? ' <span class="badge fail">' + st.fails + ' failed</span>' : '')
+    + (openPunch ? ' <span class="badge open">' + openPunch + ' open</span>' : '')
+    + (st.total && st.tested === st.total && !st.fails && !openPunch ? ' <span class="badge done">done</span>' : '')
+    + '</button>';
+  if(open){
+    html += '<div style="margin-top:8px;"><div class="device-list">';
+    g.devices.forEach(function(d){ html += deviceCardHtml(d); });
+    html += '</div>'
+      + '<button type="button" class="punch-add-btn" data-cat-add="' + esc(g.key) + '" style="margin-top:10px;">+ Add ' + (g.key === 'other' ? '' : esc(g.label.toLowerCase()) + ' ') + 'device</button></div>';
+  }
+  return html + '</div>';
+}
+
 function renderLocationDetail(){
   const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
   if(!loc){ view='locations'; renderContent(); return; }
   const st = locationStats(loc.devices);
   let devices = loc.devices;
   if(searchQuery.trim()){
-    devices = devices.filter(function(d){ return matchesSearch(d.name) || matchesSearch(d.model) || matchesSearch(d.cresnetId || '') || matchesSearch(d.controller || ''); });
+    devices = devices.filter(deviceMatchesSearch);
   }
   let html = '';
   html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
@@ -300,22 +385,32 @@ function renderLocationDetail(){
     + '<div class="meta">' + loc.devices.length + ' devices &middot; ' + st.tested + '/' + st.total + ' tested'
     + (st.fails ? (' &middot; <span style="color:var(--fail);font-weight:700">' + st.fails + ' failed</span>') : '')
     + '</div></div>';
-  html += '<div class="device-list">';
-  devices.forEach(function(d){ html += deviceCardHtml(d); });
-  html += '</div>';
+  const sections = sectionsFor(devices);
+  if(!sections){
+    html += '<div class="device-list">';
+    devices.forEach(function(d){ html += deviceCardHtml(d); });
+    html += '</div>';
+  }else{
+    const searching = !!searchQuery.trim();
+    sections.forEach(function(g){
+      const chosen = openSections[loc.name + '|' + g.key];
+      // open: whatever they chose; otherwise open when it is the room's only section; always open while searching
+      html += sectionHtml(g, searching ? true : (chosen !== undefined ? chosen : sections.length === 1));
+    });
+  }
 
-  //Punch items reported against this location rather than a device.
-  //Project-wide items, which have no location at all, stay on the punch list tab.
+  // Punch items reported against this location rather than a device. (Project-wide items, which have
+  // no location at all, stay on the Punch List tab.)
   const locationPunches = punches.filter(function(p){
     return !p.deviceId && p.location === loc.name && (!searchQuery.trim() || matchesSearch(p.description));
   });
   if(locationPunches.length){
     html += '<div class="device-card" style="margin-top:10px;">'
-    + '<div class="device-name">Location punch items</div>'
-    + '<div class="device-model"> Not tied to a specific device</div>'
-    + '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">'
-    + locationPunches.map(punchRowHtml).join('')
-    +'</div></div>'
+      + '<div class="device-name">Location punch items</div>'
+      + '<div class="device-model">Not tied to a specific device</div>'
+      + '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">'
+      + locationPunches.map(punchRowHtml).join('')
+      + '</div></div>';
   }
 
   if(addingLocationPunchFor === loc.name){
@@ -335,8 +430,8 @@ function renderLocationDetail(){
     if(ta) ta.focus();
   }
   if(addingDeviceFor === loc.name){
-    const nameInput = document.getElementById('newDeviceName');
-    if(nameInput) nameInput.focus();
+    const nameInput = document.getElementById('newDevice_name');
+    if(nameInput){ nameInput.focus(); if(nameInput.scrollIntoView) nameInput.scrollIntoView({block: 'center'}); }
   }
   if(editingNotesId){
     const ta = document.getElementById('editNoteText');
@@ -380,12 +475,24 @@ function deviceDraftField(id, label, placeholder, maxlength){
     + '</div>';
 }
 
+function deviceCategoryField(){
+  const val = deviceDraft.category || '';
+  return '<div style="margin-bottom:8px;">'
+    + '<label style="display:block;font-size:11px;font-weight:700;color:var(--ink-soft);margin-bottom:3px;">Category</label>'
+    + '<select id="newDevice_category" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:7px 8px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--ink);">'
+    + '<option value="">Not set</option>'
+    + CATEGORIES.map(function(c){ return '<option value="' + c.key + '"' + (val === c.key ? ' selected' : '') + '>' + c.label + '</option>'; }).join('')
+    + '</select></div>';
+}
+
 function addDeviceFormHtml(){
   let html = '<div class="punch-form" style="margin-top:10px;">';
   html += deviceDraftField('name', DEVICE_TYPE === 'lc' ? 'Cresnet Device Name (Required)' : 'Device Name (Required)', DEVICE_TYPE === 'lc' ? 'e.g. ZC-1-3A' : 'e.g. R1-TV1-01');
+  if(DEVICE_TYPE !== 'lc') html += deviceCategoryField();
   html += deviceDraftField('model', DEVICE_TYPE === 'lc' ? 'Model #' : 'Manufacturer | Model', DEVICE_TYPE === 'lc' ? 'e.g. CLW-DIMEX-P' : 'e.g. Sony | XR-65X90L');
   html += deviceDraftField('ip', DEVICE_TYPE === 'lc' ? 'Controller IP Address' : 'IP Address', 'e.g. 10.0.1.20');
   html += deviceDraftField('ipid', DEVICE_TYPE === 'lc' ? 'Controller IP ID' : 'IP ID');
+  if(DEVICE_TYPE !== 'lc') html += deviceDraftField('mac', 'MAC Address', 'e.g. c4:42:68:9a:71:99');
   if(DEVICE_TYPE === 'lc'){
     html += deviceDraftField('cresnetId', 'Cresnet ID', 'e.g. 03');
     html += deviceDraftField('controller', 'Controller', 'e.g. LCP-DPC1');
@@ -448,19 +555,19 @@ function deviceNoteHtml(d){
   return '<button class="btn ghost" style="margin-top:6px;padding:3px 9px;font-size:11px;" data-editnote="' + esc(d.id) + '">+ Add note</button>';
 }
 
-//One punch item as the compact row shown under a device: its description, colored by how serious it is,
-//green once resolved, with its Open / Resolved button. Used under each device and fot an item
-//reported against a location rather than a device, under that location.
+// One punch item as the compact row shown under a device: its description, coloured by how serious it
+// is (green once resolved), with its Open / Resolved button. Used under each device, and - for an item
+// reported against a location rather than a device - under that location.
 function punchRowHtml(p){
   const st = p.status === 'resolved' ? {bg:'var(--pass-bg)', txt:'var(--pass)'}
-  : p.severity === 'critical' ? {bg:'var(--fail-bg)', txt:'var(--fail)'}
-  : p.severity === 'major' ? {bg:'var(--major-bg)', txt:'var(--major)'}
-  : {bg:'var(--pending-bg)', txt:'var(--pending)'};
+    : p.severity === 'critical' ? {bg:'var(--fail-bg)', txt:'var(--fail)'}
+    : p.severity === 'major' ? {bg:'var(--major-bg)', txt:'var(--major)'}
+    : {bg:'var(--pending-bg)', txt:'var(--pending)'};
   return '<div style="font-size:11.5px;display:flex;justify-content:space-between;gap:6px;align-items:center;background:'
-  + st.bg + ';border-radius:7px;padding:5px 8px;">'
-  + '<span style="color:' + st.txt + ';font-weight:600;">' + esc(p.description) + '</span>'
-  + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '" style="padding:3px 9px;font-size:10.5px;">' + (p.status==='open'?'Open':'Resolved') + '</button>'
-  + '</div>';
+    + st.bg + ';border-radius:7px;padding:5px 8px;">'
+    + '<span style="color:' + st.txt + ';font-weight:600;">' + esc(p.description) + '</span>'
+    + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '" style="padding:3px 9px;font-size:10.5px;">' + (p.status==='open'?'Open':'Resolved') + '</button>'
+    + '</div>';
 }
 
 function deviceCardHtml(d, showLocation){
@@ -468,8 +575,8 @@ function deviceCardHtml(d, showLocation){
   const ports = portSummary(d);
   let html = '<div class="device-card" data-device="' + esc(d.id) + '">';
   html += '<div class="device-top"><div>'
-    + '<div class="device-name">' + esc(d.name) + '</div>'
-    + '<div class="device-model">' + esc(d.model || 'Model not specified')
+    + '<div class="device-name">' + esc(isZoneRow(d) ? d.name + ' \u00b7 ' + d.zone : d.name) + '</div>'
+    + '<div class="device-model">' + esc(isZoneRow(d) ? 'Speaker zone' : (d.model || 'Model not specified'))
     + (showLocation ? ' &middot; ' + esc(d.location) : '') + '</div>'
     + '</div></div>';
   html += '<div class="device-data mono">';
@@ -478,7 +585,8 @@ function deviceCardHtml(d, showLocation){
   // On an LC device the IP / IP ID belong to its controller, not to the device itself
   if(d.ip) html += '<span>' + (d.controller ? 'Ctrl IP' : 'IP') + ' <b>' + esc(d.ip) + '</b></span>';
   if(d.ipid) html += '<span>' + (d.controller ? 'Ctrl ID' : 'ID') + ' <b>' + esc(d.ipid) + '</b></span>';
-  if(d.zone) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';
+  if(d.mac) html += '<span>MAC <b>' + esc(d.mac) + '</b></span>';
+  if(d.zone && !isZoneRow(d)) html += '<span>Zone <b>' + esc(d.zone) + '</b></span>';   // a speaker zone shows it in its title
   if(d.channel) html += '<span>Ch <b>' + esc(d.channel) + '</b></span>';
   if(d.dinRail) html += '<span>DIN <b>' + esc(d.dinRail) + '</b></span>';
   if(d.connection) html += '<span>Conn <b>' + esc(d.connection) + '</b></span>';
@@ -487,7 +595,7 @@ function deviceCardHtml(d, showLocation){
   if(d.avio) html += '<div class="device-note">' + esc(d.avio) + '</div>';
   html += deviceNoteHtml(d);
   html += '<div class="check-row">';
-  CHECKS.forEach(function(chk){
+  checksFor(d).forEach(function(chk){
     const v = c[chk.key];
     const cls = v==='pass' ? 'pass' : (v==='fail' ? 'fail' : '');
     const state = v==='pass' ? 'Pass' : (v==='fail' ? 'Fail' : 'Untested');
@@ -586,8 +694,8 @@ function renderPunchList(){
         + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">'
         + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?'Mark resolved':'Resolved') + '</button>'
-        + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;width:50px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
-        + '<button class="btn delete" style="padding:4px 10px;font-size:11px;width:50px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
+        + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
+        + '<button class="btn delete" style="padding:4px 10px;font-size:11px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
         + '</div>'
         + '</div>';
     });
@@ -740,8 +848,8 @@ async function pushEditPunch(punchId, description, severity, ownership, actorNam
   });
 }
 
-//The server keeps a record of who deleted it and when (it is a soft delete there),
-//and sending the same delete twice is harmless.
+// The server keeps a record of who deleted it and when (it is a soft delete there), and sending
+// the same delete twice is harmless.
 async function pushDeletePunch(punchId, actorName){
   return apiCall('/api/punch/delete', {
     method: 'POST',
@@ -941,6 +1049,7 @@ async function submitAddDevice(){
     name: getVal('name'), model: getVal('model'), ip: getVal('ip'), ipid: getVal('ipid'),
     zone: getVal('zone'), channel: getVal('channel'), status: getVal('status'), level: getVal('level'),
     avio: getVal('avio'), note: getVal('note'),
+    category: getVal('category'), mac: getVal('mac'),
     dinRail: getVal('dinRail'), connection: getVal('connection'), cresnetId: getVal('cresnetId'), controller: getVal('controller')
   };
   if(!fields.name){ alert('Device name is required.'); return; }
@@ -951,7 +1060,7 @@ async function submitAddDevice(){
     DEVICES.push({
       id: result.id, name: fields.name, status: fields.status, level: fields.level, location: location,
       zone: fields.zone, channel: fields.channel, model: fields.model, ip: fields.ip, ipid: fields.ipid,
-      avio: fields.avio, note: fields.note, dinRail: fields.dinRail, connection: fields.connection, cresnetId: fields.cresnetId, controller: fields.controller, ports: []
+      avio: fields.avio, note: fields.note, dinRail: fields.dinRail, connection: fields.connection, cresnetId: fields.cresnetId, controller: fields.controller, category: fields.category, mac: fields.mac, sortOrder: '', ports: []
     });
     addingDeviceFor = null;
     deviceDraft = {};
@@ -1061,10 +1170,10 @@ function submitPunchEdit(punchId){
   }
 }
 
-//Delete a punch item (punch list tab). It asks firstm then the item is gone
-//and the server is told who deleted it so it can keeo a recird of who and when,
-//and the next email reports it. Like every other change it is saved on the device
-//until the server confirms, so deleting works offline too.
+// Delete a punch item (Punch List tab). It asks first; then the item is gone from the screen at once
+// and the server is told who deleted it - the server keeps a record of who and when, and the next
+// activity email reports it. Like every other change it is saved on this device until the server
+// confirms, so deleting works offline too.
 function deletePunchItem(punchId){
   const p = punches.find(function(x){ return x.id === punchId; });
   if(!p) return;
@@ -1072,16 +1181,16 @@ function deletePunchItem(punchId){
   const where = String(p.deviceName || p.location || currentProjectMeta.name || currentProject || '');
   if(!confirm('Are you sure you want to delete this punch item?\n\n"' + (what.length > 100 ? what.slice(0, 100) + '...' : what) + '" from "' + where + '"\n\nThis can\'t be undone.')) return;
   const isLocal = String(p.id).indexOf('local-') === 0;
-  //An item that hasn't reached the server yet is known there, if at all, by the id it was created with.
+  // An item that hasn't reached the server yet is known there, if at all, by the id it was created with.
   const serverId = isLocal ? String(p.id).replace(/^local-/, '') : p.id;
-  if(isLocal) p.deletedLocally = true; //Lets a create that is still on its way be undone
+  if(isLocal) p.deletedLocally = true;      // lets a create that is still on its way be undone (see sendPunch)
   punches = punches.filter(function(x){ return x !== p; });
   if(editingPunchId === p.id){ editingPunchId = null; delete editDraftText[p.id]; }
-  delete pendingOps['resolve |' + p.id]; //Nothing left to resolve or edit
-  delete pendingOps['edit |' + p.id];
+  delete pendingOps['resolve|' + p.id];     // nothing left to resolve or edit
+  delete pendingOps['edit|' + p.id];
   saveCache();
   renderContent();
-  queueOp('delete', serverId, {by:techName || 'Unnamed tech', at: new Date().toISOString()});
+  queueOp('delete', serverId, {by: techName || 'Unnamed tech', at: new Date().toISOString()});
 }
 
 // ---------- CSV export ----------
@@ -1204,7 +1313,7 @@ async function exportDeviceReport(){
 
     // ---- Sheet 1: Device Report ----
     const ws = wb.addWorksheet('Device Report');
-    ws.mergeCells('A1:' + (DEVICE_TYPE === 'lc' ? 'V' : 'R') + '1');
+    ws.mergeCells('A1:' + (DEVICE_TYPE === 'lc' ? 'V' : 'U') + '1');
     const title = ws.getCell('A1');
     title.value = projectDisplayName + ' - ' + (DEVICE_TYPE === 'lc' ? 'LC ' : '') + 'Device Report';
     title.font = {name:'Arial', size:18, bold:true, color:{argb: XL_COLORS.POWER_RED}};
@@ -1214,7 +1323,7 @@ async function exportDeviceReport(){
     // (see importChecklistResults) - device Name alone isn't reliable
     // since some projects reuse the same name across different rooms.
     let deviceHeaders = '';
-    const avDeviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
+    const avDeviceHeaders = ['Device ID','Location','Level','Device Name','Zone','Amp Channel','Manufacturer | Model','IP Address','IP ID','AV I/O','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At','Category','Order','MAC'];
     const lcDeviceHeaders = ['Device ID','Location','Device Name','Model','Cresnet ID','DIN Rail','Processor','IP Address','IP ID', 'Connection','Power','Network','Function','Updated By','Updated At','Note','Note Updated By','Note Updated At'];
     if(DEVICE_TYPE === 'av'){
       deviceHeaders = avDeviceHeaders;
@@ -1246,8 +1355,9 @@ async function exportDeviceReport(){
         cell.value = v || '';
         cell.fill = xlFill(band);
       });
+      const zoneRow = isZoneRow(d);   // a speaker zone has no power or network to test
       [c.power, c.network, c.function].forEach(function(v, i){
-        const st = checkCellStyle(v);
+        const st = (zoneRow && i < 2) ? {label:'N/A', bg: XL_COLORS.GRAVEL_BG, txt: XL_COLORS.GRAVEL_TXT} : checkCellStyle(v);
         const cell = row.getCell(11+i);
         cell.value = st.label;
         cell.fill = xlFill(st.bg);
@@ -1271,6 +1381,11 @@ async function exportDeviceReport(){
       const noteAtCell = row.getCell(18);
       noteAtCell.value = formatEasternTime(d.noteUpdatedAt);
       noteAtCell.fill = xlFill(band);
+      [d.category ? d.category.charAt(0).toUpperCase() + d.category.slice(1) : '', d.sortOrder || '', d.mac || ''].forEach(function(v, i){
+        const cell = row.getCell(19 + i);
+        cell.value = v;
+        cell.fill = xlFill(band);
+      });
       if(DEVICE_TYPE === 'lc'){
         [d.cresnetId, d.controller, d.dinRail, d.connection].forEach(function(v, i){
           const cell = row.getCell(19 + i);
@@ -1283,6 +1398,7 @@ async function exportDeviceReport(){
 
     const devWidths = [{width:20},{width:26},{width:12},{width:20},{width:12},{width:14},{width:26},{width:15},{width:12},{width:20},{width:11},{width:11},{width:11},{width:16},{width:19},{width:30},{width:16},{width:19}];
     if(DEVICE_TYPE === 'lc') devWidths.push({width:12},{width:28},{width:14},{width:16});
+    devWidths.push({width:12},{width:8},{width:20});   // Category, Order, MAC
     ws.columns = devWidths;
     ws.views = [{state:'frozen', ySplit:3}];
   }
@@ -1600,7 +1716,7 @@ function sendPunch(item){
     item.id = res.id;
     delete item.clientId;
     item.syncedClock = ++checkClock;     // lets a poll that started before this keep the item instead of dropping it
-    if(item.deletedLocally){ queueOp('delete', item.id, {by: techName || 'Unnamed tech', at: new Date().toISOString()}); return; } //Deleted while it was on its way up
+    if(item.deletedLocally){ queueOp('delete', item.id, {by: techName || 'Unnamed tech', at: new Date().toISOString()}); return; }   // deleted while it was on its way up
     // resolved while it was still waiting to go up: the status follows it
     if(item.status === 'resolved') queueOp('resolve', item.id, {status: 'resolved', by: item.resolvedBy || techName || 'Unnamed tech', at: item.resolvedAt || null});
     saveCache();
@@ -1677,6 +1793,21 @@ document.getElementById('content').addEventListener('click', function(e){
   if(cancelAddLocationBtn){ addingLocation = false; locationDraftText = ''; renderContent(); return; }
   const submitAddLocationBtn = e.target.closest('#submitAddLocation');
   if(submitAddLocationBtn){ submitAddLocation(); return; }
+  const catToggle = e.target.closest('[data-cat-toggle]');
+  if(catToggle){
+    openSections[currentLocation + '|' + catToggle.getAttribute('data-cat-toggle')] = catToggle.getAttribute('aria-expanded') !== 'true';
+    saveOpenSections();
+    renderContent();
+    return;
+  }
+  const catAdd = e.target.closest('[data-cat-add]');
+  if(catAdd){
+    const key = catAdd.getAttribute('data-cat-add');
+    addingDeviceFor = currentLocation;
+    deviceDraft = {category: key === 'other' ? '' : key};
+    renderContent();
+    return;
+  }
   const addDeviceBtn = e.target.closest('#addDeviceBtn');
   if(addDeviceBtn){ addingDeviceFor = currentLocation; deviceDraft = {}; renderContent(); return; }
   const cancelAddDeviceBtn = e.target.closest('#cancelAddDevice');
@@ -1776,7 +1907,7 @@ document.getElementById('content').addEventListener('click', function(e){
 
   const saveEditBtn = e.target.closest('#saveEditPunch');
   if(saveEditBtn){ submitPunchEdit(saveEditBtn.getAttribute('data-punch')); return; }
- 
+
   const deletePunchBtn = e.target.closest('[data-deletepunch]');
   if(deletePunchBtn){ deletePunchItem(deletePunchBtn.getAttribute('data-deletepunch')); return; }
 
@@ -1791,6 +1922,7 @@ document.getElementById('content').addEventListener('click', function(e){
 });
 document.getElementById('content').addEventListener('change', function(e){
   if(e.target.id === 'punchLocFilter'){ punchLocationFilter = e.target.value; renderContent(); }
+  if(e.target.id === 'newDevice_category' && addingDeviceFor){ deviceDraft.category = e.target.value; }
 });
 document.getElementById('content').addEventListener('input', function(e){
   if(isPlainTextBox(e.target) && !e.isComposing) cleanInputBox(e.target);
@@ -2070,6 +2202,7 @@ async function boot(){
   document.title = (currentProjectMeta.shortName || currentProjectMeta.name) + ' ' + DEVICE_TYPE_LABEL + ' Commissioning';
 
   loadCache();
+  loadOpenSections();
   restorePendingChecks();
   restorePendingOps();
   applyPendingOps();
