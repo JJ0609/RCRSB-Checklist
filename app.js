@@ -740,7 +740,7 @@ function renderPunchList(){
         + '<span>' + fmtTime(p.createdAt) + '</span></div>'
         + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">'
-        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?(READ_ONLY ? 'Open' : 'Mark resolved'):'Resolved') + '</button>'
+        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?(looksReadOnly() ? 'Open' : 'Mark resolved'):'Resolved') + '</button>'
         + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
         + '<button class="btn delete" style="padding:4px 10px;font-size:11px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
         + '</div>'
@@ -756,6 +756,7 @@ function renderPunchList(){
 }
 
 function renderContent(){
+  if(showingPendingField){ renderFieldPending(); renderStats(); return; }
   if(view === 'locations') renderLocations();
   else if(view === 'location-detail') renderLocationDetail();
   else if(view === 'failed-checks') renderFailedChecks();
@@ -785,19 +786,25 @@ function readOnlyReasonFor(meta){
   return meta && meta.archived ? 'archived' : (meta && meta.locked ? 'locked' : '');
 }
 function sideName(){ return STAGE === 'field' ? 'The Field side' : 'FPT'; }
+// Only an ARCHIVED project looks different (a banner, and the controls that change things are hidden). A LOCKED side looks exactly
+// like an unlocked one - same buttons, same page - it just does not let anything change, and says so briefly if someone tries.
+function looksReadOnly(){ return READ_ONLY && READ_ONLY_REASON !== 'locked'; }
 function readOnlyBannerHtml(){
-  if(READ_ONLY_REASON === 'locked'){
-    return '<b>' + sideName() + ' is locked - read only.</b> ' + (STAGE === 'fpt' && STAGES.field ? 'It has been shipped to the field, so it can be looked at but not changed. ' : 'It can be looked at but not changed. ')
-      + 'An admin can unlock it if it needs to be edited.';
-  }
   return '<b>Archived - read only.</b> You can look through everything and export it, but nothing can be changed. An admin can unarchive the project if it needs to be edited.';
+}
+let lockedNoticeAt = 0;
+function showLockedNotice(){
+  const now = Date.now();
+  if(now - lockedNoticeAt < 2500) return;   // a few quick taps give one message, not a stack of them
+  lockedNoticeAt = now;
+  showToast(sideName() + ' is locked, so nothing can be changed here.');
 }
 // Everything that changes something. Looking around - rooms, sections, search, the Previous / Next buttons, filters, exporting - is
 // not in this list and keeps working.
 const WRITE_CONTROLS = '#addLocationBtn, #submitAddLocation, [data-cat-add], #addDeviceBtn, #submitAddDevice, #addLocationPunchBtn, #addProjectPunchBtn, '
   + '#submitLocationPunch, [data-editnote], #saveEditNote, .check-pill, .punch-add-btn, #submitPunch, [data-editpunch], #saveEditPunch, [data-deletepunch], .status-btn';
 function applyReadOnly(){
-  document.body.classList.toggle('read-only', READ_ONLY);
+  document.body.classList.toggle('read-only', looksReadOnly());
   if(!document.getElementById('readOnlyStyle')){
     const style = document.createElement('style');
     style.id = 'readOnlyStyle';
@@ -808,7 +815,7 @@ function applyReadOnly(){
     document.head.appendChild(style);
   }
   let bar = document.getElementById('readOnlyBanner');
-  if(!READ_ONLY){ if(bar) bar.remove(); return; }
+  if(!looksReadOnly()){ if(bar) bar.remove(); return; }
   if(!bar){
     const content = document.getElementById('content');
     if(!content || !content.parentNode) return;
@@ -885,31 +892,62 @@ function goToStage(which){
   try{ localStorage.setItem('pd_stage_' + STAGES.fpt, which); }catch(e){}
   navigateTo('index.html?project=' + encodeURIComponent(target) + '&type=' + DEVICE_TYPE);
 }
+// While the project has no Field side yet, the Field button shows this notice instead of going anywhere.
+let showingPendingField = false;
+function renderFieldPending(){
+  document.getElementById('content').innerHTML =
+    '<div class="empty" style="padding:50px 20px;">'
+    + '<div style="font-weight:800;font-size:16px;margin-bottom:6px;color:var(--ink);">Not shipped to the field yet</div>'
+    + '<div>The Field side is created when an admin chooses Ship to Field in the admin panel. It starts as a copy of FPT with every check blank, and FPT is locked at that point.</div>'
+    + '</div>';
+}
+function updateStageButtons(){
+  const box = document.getElementById('stageSwitch');
+  if(!box) return;
+  const current = showingPendingField ? 'field' : STAGE;
+  box.querySelectorAll('[data-stage]').forEach(function(b){
+    const on = b.getAttribute('data-stage') === current;
+    b.classList.toggle('project-filter-button-active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+// The FPT | Field buttons, in the header, from the start - the same buttons as Active / Archived on the projects page. To the person it is
+// one project; these just open its other side (the same room list, with the same grants).
 function renderStageHeader(){
-  const hasField = !!STAGES.field;
-  const sub = document.getElementById('projSub');
-  if(sub){
-    sub.textContent = sub.textContent.replace(/ \u00b7 (FPT|Field)$/, '');
-    if(hasField) sub.textContent += ' \u00b7 ' + (STAGE === 'field' ? 'Field' : 'FPT');
-  }
-  let link = document.getElementById('switchStageLink'), sep = document.getElementById('switchStageSep');
-  if(!hasField){ if(link) link.remove(); if(sep) sep.remove(); return; }
-  if(hasField && STAGES.fpt){ try{ localStorage.setItem('pd_stage_' + STAGES.fpt, STAGE); }catch(e){} }   // the project list opens the side you used last
-  if(!link){
-    const anchor = document.getElementById('switchSideLink') || document.getElementById('logoutLink');
+  let box = document.getElementById('stageSwitch');
+  if(!box){
+    const anchor = document.querySelector('.stats-row');
     if(!anchor || !anchor.parentNode) return;
-    link = document.createElement('a');
-    link.id = 'switchStageLink';
-    link.className = 'projects-link';
-    link.href = '#';
-    sep = document.createElement('span');
-    sep.id = 'switchStageSep';
-    sep.textContent = ' \u00b7 ';
-    anchor.parentNode.insertBefore(link, anchor.parentNode.firstChild);
-    anchor.parentNode.insertBefore(sep, link.nextSibling);
-    link.addEventListener('click', function(e){ e.preventDefault(); goToStage(STAGE === 'field' ? 'fpt' : 'field'); });
+    box = document.createElement('div');
+    box.id = 'stageSwitch';
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', 'Project side');
+    box.style.cssText = 'display:flex;gap:6px;margin:12px 0 0;';
+    box.innerHTML = '<button type="button" class="project-filter-button" data-stage="fpt">FPT</button>'
+      + '<button type="button" class="project-filter-button" data-stage="field">Field</button>';
+    anchor.parentNode.insertBefore(box, anchor);
+    box.addEventListener('click', function(e){
+      const b = e.target.closest('[data-stage]');
+      if(!b) return;
+      const which = b.getAttribute('data-stage');
+      if(which === STAGE){
+        if(showingPendingField){ showingPendingField = false; updateStageButtons(); renderContent(); }
+        return;
+      }
+      if(STAGES[which]){ goToStage(which); return; }
+      showingPendingField = true;   // Field, but it has not been shipped yet
+      updateStageButtons();
+      renderContent();
+    });
+    // going back to any of the normal tabs leaves the notice
+    ['tabLocations', 'tabPunch', 'statOpenCard', 'statFailCard'].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.addEventListener('click', function(){ if(showingPendingField){ showingPendingField = false; updateStageButtons(); } }, true);
+    });
   }
-  link.textContent = 'Switch to ' + (STAGE === 'field' ? 'FPT' : 'Field');
+  if(STAGES.fpt){ try{ localStorage.setItem('pd_stage_' + STAGES.fpt, STAGE); }catch(e){} }   // the project list opens the side you used last
+  if(showingPendingField && STAGES.field){ showingPendingField = false; updateStageButtons(); renderContent(); return; }   // it was shipped while the notice was showing
+  updateStageButtons();
 }
 
 // On the Field side: what FPT recorded, shown read-only beside the field's own results so the field can check against it.
@@ -1229,8 +1267,7 @@ async function syncFromRemote(){
       STAGES = {fpt: remote.stages.fpt || STAGES.fpt, field: remote.stages.field || null};
       if(currentProjectMeta) currentProjectMeta.stages = STAGES;
       renderStageHeader();
-      if(READ_ONLY) applyReadOnly();   // the banner's wording differs once the project is shipped
-    }
+      }
     if(typeof remote.archived === 'boolean') applyServerFlags(remote.archived, remote.locked === true);
     const wasEnabled = syncEnabled;
     const before = stateSignature(checklist, punches);
@@ -2039,7 +2076,7 @@ window.addEventListener('pageshow', function(e){ if(e.persisted && currentProjec
 
 // ---------- events ----------
 document.getElementById('content').addEventListener('click', function(e){
-  if(READ_ONLY && e.target.closest(WRITE_CONTROLS)) return;   // an archived or locked side is read-only
+  if(READ_ONLY && e.target.closest(WRITE_CONTROLS)){ if(!looksReadOnly()) showLockedNotice(); return; }   // an archived or locked side is read-only
   const locCard = e.target.closest('[data-loc]');
   if(locCard){ currentLocation = locCard.getAttribute('data-loc'); view = 'location-detail'; searchQuery=''; document.getElementById('searchInput').value=''; renderContent(); return; }
 
