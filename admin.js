@@ -111,7 +111,7 @@ async function loadProjectList(){
       const accessSummary = emails.length ? ('Visible to ' + emails.length + ' email' + (emails.length===1?'':'s')) : 'Visible to everyone';
       return '<div class="admin-row">'
         + '<div class="info"><div class="name">' + esc(p.name) + (p.archived ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">(Archived)</span>' : '') + '</div>'
-        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' AV &middot; ' + (lcCounts[p.id] || 0) + ' LC' + ' &middot; ' + esc(accessSummary) + '</div>'
+        + '<div class="meta">' + esc(p.id) + ' &middot; ' + p.deviceCount + ' AV &middot; ' + (lcCounts[p.id] || 0) + ' LC' + ' &middot; ' + esc(accessSummary) + stageSummary(p) + '</div>'
         + '<div class="field-hint" data-status-for="' + esc(p.id) + '"></div></div>'
         + '<div class="row-actions">'
         + '<input type="file" accept=".xlsx" data-update-file="' + esc(p.id) + '" style="display:none;">'
@@ -120,7 +120,9 @@ async function loadProjectList(){
         + '<button class="btn" data-update="' + esc(p.id) + '" title="Detects AV or LC automatically from the sheet the file contains">Update Devices</button>'
         + '<button class="btn" data-import="' + esc(p.id) + '">Import Results</button>'
         + '<button class="btn" data-sync="' + esc(p.id) + '" style="border-color:var(--open);color:var(--open);" title="Detects AV or LC automatically. Adds/updates devices AND removes any device or location missing from the file">Sync Devices (removes missing)</button>'
-        + '<button class="btn" data-archive="' + esc(p.id) + '" data-currently-archived="' + (p.archived ? '1' : '0') + '">' + (p.archived ? 'Unarchive' : 'Archive') + '</button>'
+        + (p.shipped ? '' : '<button class="btn" data-ship="' + esc(p.id) + '" title="Makes the Field side as a copy of FPT, then locks FPT. A project ships once.">Ship to Field</button>')
+        + '<button class="btn" data-lock="' + esc(p.id) + '" data-currently-locked="' + (p.locked ? '1' : '0') + '" title="Locks FPT so it can be looked at but not changed (it stays an active project)">' + (p.locked ? 'Unlock FPT' : 'Lock FPT') + '</button>'
+        + '<button class="btn" data-archive="' + esc(p.id) + '" data-currently-archived="' + (p.archived ? '1' : '0') + '" title="Archives the whole project, buth sides">' + (p.archived ? 'Unarchive' : 'Archive') + '</button>'
         + '<button class="btn" data-delete="' + esc(p.id) + '" style="border-color:var(--fail);color:var(--fail);">Delete</button>'
         + '</div>'
         + '</div>';
@@ -129,6 +131,26 @@ async function loadProjectList(){
 
     el.innerHTML = '<div class="field-hint">Couldn\'t load the project list.</div>';
   }
+}
+
+//A project is one row in this panel. Once it has been shipped it has two sides (FPT:Locked, and Field) behind that one
+//Row and update devices/sync/import results apply to the field side. These read what the project list said about it.
+function projectInfo(id){
+  return (window._pdProjects || []).find(function(p){ return p.id === id; }) || null;
+}
+function workingProjectId(id){
+  const p = projectInfo(id);
+  return p && p.shipped && p.fieldId ? p.fieldId : id;
+}
+function stageNote(id){
+  const p = projectInfo(id);
+  return p && p.shipped ? '\n\nThis project has been shipped to the field, so this applies to its FIELD side (FPT is locked).' : '';
+}
+function stageSummary(p){
+  const bits = [];
+  if(p.shipped) bits.push('Shipped to field');
+  if(p.locked) bits.push('FPT locked');
+  return bits.length ? ' &middot; ' + bits.join(' &middot; ') : ''; //Fixed words only, nothing typed by a person
 }
 
 function populateGrantProjectDropdown(projects){
@@ -140,6 +162,47 @@ function populateGrantProjectDropdown(projects){
 }
 
 document.getElementById('projectList').addEventListener('click', async function(e){
+  const shipBtn = e.target.closest('[data-ship]');
+  if(shipBtn){
+    const id = shipBtn.getAttribute('data-ship');
+    const statusEl = document.querySelector('[data-status-for="' + CSS.escape(id) + '"]');
+    if(!confirm('Ship "' + id + '" to the field?\n\n' +
+      'This makes the Field side as a copy of FPT\'s devices, rooms and notes (AV and LC), with every check blank. FPT is then LOCKED: it can be looked at but not changed. ' +
+      'FPT\'s results and punch items are not copied - the field sees them beside its own, read-only. The people who can see the project see both sides.\n\n' +
+      'A project can only be shipped ONCE. After this, Update Devices, Sync Devices and Import Results apply to the Field side.')) return;
+    shipBtn.disabled = true;
+    const originalLabel = shipBtn.textContent;
+    shipBtn.textContent = 'Shipping...';
+    try{
+      const r = await adminFetch('/api/admin/projects/ship', {method: 'POST', body: JSON.stringify({id: id, actorName: (sessionStorage.getItem('pd_user_email') || 'Admin')})});
+      const doneText = 'Shipped to the field: ' + r.devices + ' device' + (r.devices === 1 ? '' : 's') + ' and ' + r.locations + ' added room' + (r.locations === 1 ? '' : 's') + ' copied. FPT is now locked.';
+      await loadProjectList();   // redraws the row - so the confirmation goes on AFTER it, or it would be wiped straight away
+      const again = document.querySelector('[data-status-for="' + CSS.escape(id) + '"]');
+      if(again) again.textContent = doneText;
+    }catch(err){
+      alert('Could not ship to the field: ' + err.message);
+      shipBtn.disabled = false;
+      shipBtn.textContent = originalLabel;
+    }
+    return;
+  }
+  const lockBtn = e.target.closest('[data-lock]');
+  if(lockBtn){
+    const id = lockBtn.getAttribute('data-lock');
+    const nowLocked = lockBtn.getAttribute('data-currently-locked') !== '1';
+    if(!confirm(nowLocked
+      ? 'Lock FPT for "' + id + '"?\n\nFPT becomes read-only: everyone can still look at it and export it, but nothing in it can be changed. It stays an active project.'
+      : 'Unlock FPT for "' + id + '"?\n\nPeople will be able to change FPT again.')) return;
+    lockBtn.disabled = true;
+    try{
+      await adminFetch('/api/admin/projects/lock', {method: 'POST', body: JSON.stringify({id: id, locked: nowLocked})});
+      loadProjectList();
+    }catch(err){
+      alert('Could not ' + (nowLocked ? 'lock' : 'unlock') + ': ' + err.message);
+      lockBtn.disabled = false;
+    }
+    return;
+  }
   const archiveBtn = e.target.closest('[data-archive]');
   if(archiveBtn){
     const id = archiveBtn.getAttribute('data-archive');
@@ -161,7 +224,8 @@ document.getElementById('projectList').addEventListener('click', async function(
   const delBtn = e.target.closest('[data-delete]');
   if(delBtn){
     const id = delBtn.getAttribute('data-delete');
-    if(!confirm('Delete project "' + id + '"? This permanently removes its device list, checklist, and punch list. This can\'t be undone.')) return;
+    const delInfo = projectInfo(id)
+    if(!confirm('Delete project "' + id + '"? This permanently removes its device list, checklist, and punch list' + (delInfo && delInfo.shipped ? ' - for BOTH its FPT and Field sides' : '') +'. This can\'t be undone.')) return;
     delBtn.disabled = true;
     delBtn.textContent = 'Deleting...';
     try{
@@ -230,7 +294,7 @@ document.getElementById('projectList').addEventListener('change', async function
         'Every field it contains - ' + fieldList + ', and the punch list sheet - will OVERWRITE the current values ' +
         'for matching rows (matched by Device ID / Punch ID, not by name). A field the file has no column for is left alone. ' +
         'New rows with a blank Punch ID are created as new punch items. If this file is older than the live data, ' +
-        're-uploading it can revert newer changes.'
+        're-uploading it can revert newer changes.' + stageNote(id)
       )){
         if(statusEl) statusEl.textContent = '';
         return;
@@ -285,7 +349,7 @@ document.getElementById('projectList').addEventListener('change', async function
       // still independently recomputes this itself; nothing here is
       // trusted as the source of truth for the actual deletion.
       if(statusEl) statusEl.textContent = 'Checking what would change...';
-      const current = await adminFetch('/api/devices?project=' + encodeURIComponent(id) + '&deviceType=' + deviceType, {method: 'GET'});
+      const current = await adminFetch('/api/devices?project=' + encodeURIComponent(workingProjectId(id)) + '&deviceType=' + deviceType, {method: 'GET'});
       const currentDevices = current.devices || [];
 
       const newIds = new Set(newDevices.map(function(d){ return d.id; }));
@@ -318,6 +382,7 @@ document.getElementById('projectList').addEventListener('change', async function
       }
 
       confirmMsg += 'Punch list history is never deleted, even for a removed device. This can\'t be undone otherwise.';
+      confirmMsg += stageNote(id)
       confirmMsg += notesText(newDevices);
 
       if(!confirm(confirmMsg)){
@@ -371,7 +436,7 @@ document.getElementById('projectList').addEventListener('change', async function
       'It will NOT delete any device or touch existing checklist/punch data - ' +
       'even devices missing from this file are left as-is. ' +
       (typeLabel === 'LC' ? 'AV devices in this project are never affected.' : 'LC devices in this project are never affected.') +
-      notesText(devices)
+      stageNote(id) + notesText(devices)
     )){
       fileInput.value = '';
       btn.disabled = false;

@@ -64,6 +64,11 @@ let DEVICES = [];
 let LOCATIONS = [];
 let SERVER_LOCATIONS = [];
 let LOCATION_NOTES = {};   // room name -> the room's note (the sheet's General Note column), shown under the room name
+//A project can have two SIDES, FPT and FIELD. This page is showing one of them, STAGES holds the id of each(the other is null until the project
+//has been shipped) on the FIELD side, FPT_REF is what FPT recorded, shown behind the Fields own results, read only.
+let STAGE = 'fpt';
+let STAGES = {fpt: null, field: null};
+let FPT_REF = {checklist: {}, punches: []};
 let DEVICE_BY_ID = {};
 
 let checklist = {};   // deviceId -> {power,network,function}
@@ -173,13 +178,14 @@ function loadCache(){
       const parsed = JSON.parse(raw);
       checklist = parsed.checklist || {};
       punches = parsed.punches || [];
+      FPT_REF = parsed.reference || {checklist: {}, punches: []};
       punches.forEach(function(p){ delete p.syncError; delete p.syncedClock; });
     }
   }catch(e){}
 }
 function saveCache(){
   try{
-    localStorage.setItem('pd_commissioning_cache_' + currentProject + '_' + DEVICE_TYPE, JSON.stringify({checklist:checklist, punches:punches}));
+    localStorage.setItem('pd_commissioning_cache_' + currentProject + '_' + DEVICE_TYPE, JSON.stringify({checklist:checklist, punches:punches, reference:FPT_REF}));
   }catch(e){}
 }
 
@@ -416,7 +422,7 @@ function renderLocationDetail(){
   const roomIndex = LOCATIONS.indexOf(loc);
   html += '<div class="back-row" style="justify-content:space-between;">'
   + '<button class="back-btn" id="backBtn">&larr; All locations</button>'
-  + '<div style="display:flex;ghap:8px;">'
+  + '<div style="display:flex;gap:8px;">'
   + roomStepButtonHtml('prev', roomIndex > 0 ? LOCATIONS[roomIndex - 1] : null)
   + roomStepButtonHtml('next', roomIndex !== -1 && roomIndex < LOCATIONS.length - 1 ? LOCATIONS[roomIndex + 1] : null)
   + '</div></div>';
@@ -642,6 +648,7 @@ function deviceCardHtml(d, showLocation){
       + '<span class="k">' + chk.label + '</span>' + state + '</button>';
   });
   html += '</div>';
+  html += fptReferenceHtml(d);
   const devicePunches = punches.filter(function(p){ return p.deviceId === d.id; });
   if(devicePunches.length){
     html += '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">';
@@ -649,6 +656,7 @@ function deviceCardHtml(d, showLocation){
     html += '</div>';
   }
 
+  html += fptPunchRowsHtml(d.id);
   if(openPunchFormFor === d.id){
 
     html += '<div class="punch-form">'
@@ -732,13 +740,14 @@ function renderPunchList(){
         + '<span>' + fmtTime(p.createdAt) + '</span></div>'
         + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">'
-        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?'Mark resolved':'Resolved') + '</button>'
+        + '<button class="status-btn ' + (p.status==='resolved'?'resolved':'') + '" data-punch="' + esc(p.id) + '">' + (p.status==='open'?(READ_ONLY ? 'Open' : 'Mark resolved'):'Resolved') + '</button>'
         + '<button class="btn ghost" style="padding:4px 10px;font-size:11px;" data-editpunch="' + esc(p.id) + '">Edit</button>'
         + '<button class="btn delete" style="padding:4px 10px;font-size:11px;" data-deletepunch="' + esc(p.id) + '">Delete</button>'
         + '</div>'
         + '</div>';
     });
   }
+  html += fptPunchSectionHtml();
   document.getElementById('content').innerHTML = html;
   if(addingLocationPunchFor === PROJECT_WIDE_SCOPE){
     const ta = document.getElementById('locationPunchDesc');
@@ -764,6 +773,194 @@ function syncConfigured(){
   return SYNC_API_BASE && SYNC_API_BASE.indexOf('REPLACE-WITH') === -1;
 }
 
+// ---------- read-only: an ARCHIVED project, or a LOCKED side ----------
+// The Worker refuses every change to a side that is archived or locked (HTTP 423) - that is the real lock. This is the app side of it: the
+// screen says so, every control that would change something is switched off, and nothing is sent. Archived = the whole project is
+// finished. Locked = this side is frozen but the project is in use (FPT, once shipped). Either can change while someone has the project
+// open, so the answer is also taken from the background check every few seconds and from the refusal itself.
+let READ_ONLY = false;
+let READ_ONLY_REASON = '';   // 'archived' | 'locked' | ''
+let archivedNoticeShown = false;
+function readOnlyReasonFor(meta){
+  return meta && meta.archived ? 'archived' : (meta && meta.locked ? 'locked' : '');
+}
+function sideName(){ return STAGE === 'field' ? 'The Field side' : 'FPT'; }
+function readOnlyBannerHtml(){
+  if(READ_ONLY_REASON === 'locked'){
+    return '<b>' + sideName() + ' is locked - read only.</b> ' + (STAGE === 'fpt' && STAGES.field ? 'It has been shipped to the field, so it can be looked at but not changed. ' : 'It can be looked at but not changed. ')
+      + 'An admin can unlock it if it needs to be edited.';
+  }
+  return '<b>Archived - read only.</b> You can look through everything and export it, but nothing can be changed. An admin can unarchive the project if it needs to be edited.';
+}
+// Everything that changes something. Looking around - rooms, sections, search, the Previous / Next buttons, filters, exporting - is
+// not in this list and keeps working.
+const WRITE_CONTROLS = '#addLocationBtn, #submitAddLocation, [data-cat-add], #addDeviceBtn, #submitAddDevice, #addLocationPunchBtn, #addProjectPunchBtn, '
+  + '#submitLocationPunch, [data-editnote], #saveEditNote, .check-pill, .punch-add-btn, #submitPunch, [data-editpunch], #saveEditPunch, [data-deletepunch], .status-btn';
+function applyReadOnly(){
+  document.body.classList.toggle('read-only', READ_ONLY);
+  if(!document.getElementById('readOnlyStyle')){
+    const style = document.createElement('style');
+    style.id = 'readOnlyStyle';
+    style.textContent = 'body.read-only .punch-add-btn, body.read-only [data-cat-add], body.read-only #addDeviceBtn, body.read-only #addLocationBtn, '
+      + 'body.read-only #addLocationPunchBtn, body.read-only #addProjectPunchBtn, body.read-only [data-editnote], body.read-only [data-editpunch], '
+      + 'body.read-only [data-deletepunch]{display:none !important;} '
+      + 'body.read-only .check-pill, body.read-only .status-btn{pointer-events:none;cursor:default;}';
+    document.head.appendChild(style);
+  }
+  let bar = document.getElementById('readOnlyBanner');
+  if(!READ_ONLY){ if(bar) bar.remove(); return; }
+  if(!bar){
+    const content = document.getElementById('content');
+    if(!content || !content.parentNode) return;
+    bar = document.createElement('div');
+    bar.id = 'readOnlyBanner';
+    bar.setAttribute('role', 'status');
+    bar.style.cssText = 'margin:10px 16px 0;padding:10px 12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);color:var(--ink);font-size:13px;line-height:1.4;';
+    content.parentNode.insertBefore(bar, content);
+  }
+  bar.innerHTML = readOnlyBannerHtml();
+}
+// Throw away anything this device was still waiting to send. Returns how many changes that was.
+function discardUnsavedWork(){
+  let n = 0;
+  Object.keys(localCheckEdits).forEach(function(k){ if(localCheckEdits[k].status !== 'settled') n++; delete localCheckEdits[k]; });
+  Object.keys(pendingOps).forEach(function(k){ if(pendingOps[k].status !== 'settled') n++; delete pendingOps[k]; });
+  const before = punches.length;
+  punches = punches.filter(function(p){ return String(p.id).indexOf('local-') !== 0; });
+  n += before - punches.length;
+  persistPendingChecks();
+  persistPendingOps();
+  saveCache();
+  return n;
+}
+function tellArchivedLoss(lost){
+  if(!lost || archivedNoticeShown) return;
+  archivedNoticeShown = true;
+  alert((READ_ONLY_REASON === 'locked' ? sideName() + ' is locked, so it is read-only. ' : 'This project is archived, so it is read-only. ')
+    + lost + ' change' + (lost === 1 ? '' : 's') + ' made on this device could not be saved.');
+}
+// Anything half-open for typing (a punch form, a note, a new device...) is closed when a side turns read-only: the form would stay on
+// screen, but whatever was typed in it could never be sent.
+function closeOpenEditors(){
+  openPunchFormFor = null;
+  editingPunchId = null;
+  editingNotesId = null;
+  addingLocation = false;
+  addingDeviceFor = null;
+  addingLocationPunchFor = null;
+}
+// What the server says about this side right now (the refusal of a change, or the background check). Switches the page into or out of
+// read-only to match; changes that were still waiting to be sent are discarded when it becomes read-only, and the person is told.
+function applyServerFlags(archived, locked){
+  if(currentProjectMeta){ currentProjectMeta.archived = !!archived; currentProjectMeta.locked = !!locked; }
+  const reason = archived ? 'archived' : (locked ? 'locked' : '');
+  if(reason){
+    if(READ_ONLY && READ_ONLY_REASON === reason) return;
+    const becoming = !READ_ONLY;
+    READ_ONLY = true;
+    READ_ONLY_REASON = reason;
+    const lost = becoming ? discardUnsavedWork() : 0;
+    if(becoming) closeOpenEditors();
+    applyReadOnly();
+    renderContent();
+    tellArchivedLoss(lost);
+    if(becoming) setTimeout(syncFromRemote, 0);   // put the real values back on screen straight away (a tapped check shows as it really is)
+  }else if(READ_ONLY){
+    READ_ONLY = false;
+    READ_ONLY_REASON = '';
+    archivedNoticeShown = false;
+    applyReadOnly();
+    renderContent();
+  }
+}
+
+// ---------- the two sides of a project ----------
+function navigateTo(url){ window.location.href = url; }
+// The Field toggle in the header: shown only once the project has been shipped. To the person it is the same project; this just opens its
+// other side (the same room list, with the same grants).
+function goToStage(which){
+  const target = which === 'field' ? STAGES.field : STAGES.fpt;
+  if(!target) return;
+  if(!confirmLeaveWithDraft(false)) return;
+  try{ localStorage.setItem('pd_stage_' + STAGES.fpt, which); }catch(e){}
+  navigateTo('index.html?project=' + encodeURIComponent(target) + '&type=' + DEVICE_TYPE);
+}
+function renderStageHeader(){
+  const hasField = !!STAGES.field;
+  const sub = document.getElementById('projSub');
+  if(sub){
+    sub.textContent = sub.textContent.replace(/ \u00b7 (FPT|Field)$/, '');
+    if(hasField) sub.textContent += ' \u00b7 ' + (STAGE === 'field' ? 'Field' : 'FPT');
+  }
+  let link = document.getElementById('switchStageLink'), sep = document.getElementById('switchStageSep');
+  if(!hasField){ if(link) link.remove(); if(sep) sep.remove(); return; }
+  if(hasField && STAGES.fpt){ try{ localStorage.setItem('pd_stage_' + STAGES.fpt, STAGE); }catch(e){} }   // the project list opens the side you used last
+  if(!link){
+    const anchor = document.getElementById('switchSideLink') || document.getElementById('logoutLink');
+    if(!anchor || !anchor.parentNode) return;
+    link = document.createElement('a');
+    link.id = 'switchStageLink';
+    link.className = 'projects-link';
+    link.href = '#';
+    sep = document.createElement('span');
+    sep.id = 'switchStageSep';
+    sep.textContent = ' \u00b7 ';
+    anchor.parentNode.insertBefore(link, anchor.parentNode.firstChild);
+    anchor.parentNode.insertBefore(sep, link.nextSibling);
+    link.addEventListener('click', function(e){ e.preventDefault(); goToStage(STAGE === 'field' ? 'fpt' : 'field'); });
+  }
+  link.textContent = 'Switch to ' + (STAGE === 'field' ? 'FPT' : 'Field');
+}
+
+// On the Field side: what FPT recorded, shown read-only beside the field's own results so the field can check against it.
+function refSignature(){
+  return Object.keys(FPT_REF.checklist).sort().map(function(id){
+    const v = FPT_REF.checklist[id] || {};
+    return id + ':' + (v.power || '') + '/' + (v.network || '') + '/' + (v.function || '');
+  }).join(',') + '#' + FPT_REF.punches.map(function(x){ return [x.id, x.status, x.description].join('~'); }).join('|');
+}
+function fptReferenceHtml(d){
+  if(STAGE !== 'field') return '';
+  const ref = FPT_REF.checklist[d.id];
+  const parts = checksFor(d).map(function(chk){
+    const v = ref ? ref[chk.key] : null;
+    const word = v === 'pass' ? 'Pass' : (v === 'fail' ? 'Fail' : 'not tested');
+    const color = v === 'pass' ? 'var(--pass)' : (v === 'fail' ? 'var(--fail)' : 'var(--ink-soft)');
+    return '<span>' + chk.label + ' <b style="color:' + color + ';">' + word + '</b></span>';
+  });
+  const who = ref && ref.updatedBy ? 'FPT - last updated by ' + ref.updatedBy + (ref.updatedAt ? ', ' + fmtTime(ref.updatedAt) : '') : 'FPT recorded no results for this one';
+  return '<div class="fpt-ref" title="' + esc(who) + '" style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;font-size:11.5px;color:var(--ink-soft);">'
+    + '<span style="font-weight:800;font-size:10px;letter-spacing:.08em;text-transform:uppercase;">FPT</span> ' + parts.join(' ') + '</div>';   // spaces between the parts, so a screen reader does not run them together
+}
+function refPunchRowHtml(p){
+  const color = p.severity === 'critical' ? 'var(--fail)' : (p.severity === 'major' ? 'var(--major)' : 'var(--pending)');   // the same colours as the field's own punch rows
+  return '<div class="fpt-punch" style="font-size:12px;background:var(--surface-2);border-left:3px solid ' + color + ';border-radius:7px;padding:5px 8px;color:var(--ink-soft);">'
+    + '<b style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-right:6px;">FPT</b>' + esc(p.description)
+    + ' <span style="font-size:11px;">(' + esc(p.severity || '') + ' &middot; ' + (p.status === 'resolved' ? 'resolved' : 'open') + (p.reportedBy ? ' &middot; ' + esc(p.reportedBy) : '') + ')</span></div>';
+}
+function fptPunchRowsHtml(deviceId){
+  if(STAGE !== 'field') return '';
+  const list = FPT_REF.punches.filter(function(p){ return p.deviceId === deviceId; });
+  if(!list.length) return '';
+  return '<div style="margin-top:8px;display:flex;flex-direction:column;gap:5px;">' + list.map(refPunchRowHtml).join('') + '</div>';
+}
+// The Punch List tab: FPT's items under the field's own, with the same filters, and nothing to click.
+function fptPunchSectionHtml(){
+  if(STAGE !== 'field' || !FPT_REF.punches.length) return '';
+  let list = FPT_REF.punches.slice().sort(function(a, b){ return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  if(punchStatusFilter !== 'all') list = list.filter(function(p){ return p.status === punchStatusFilter; });
+  if(punchLocationFilter === PROJECT_WIDE_SCOPE) list = list.filter(function(p){ return !p.location; });
+  else if(punchLocationFilter) list = list.filter(function(p){ return p.location === punchLocationFilter; });
+  if(searchQuery.trim()) list = list.filter(function(p){ return matchesSearch(p.description) || matchesSearch(p.deviceName) || matchesSearch(p.location); });
+  let html = '<div class="section-label" style="margin:18px 2px 8px;">FPT punch items (read only)</div>';
+  if(!list.length) return html + '<div class="empty" style="padding:14px 10px;">None match.</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+  list.forEach(function(p){
+    html += refPunchRowHtml(p).replace('</div>', '<div style="font-size:11px;margin-top:2px;">' + esc(p.deviceName || 'General') + (p.location ? ' &middot; ' + esc(p.location) : '') + '</div></div>');
+  });
+  return html + '</div>';
+}
+
 async function apiCall(path, options){
   const opts = options || {};
   // Optional per-call timeout. Check writes go out one at a time per field
@@ -783,6 +980,7 @@ async function apiCall(path, options){
       const text = await res.text().catch(function(){ return ''; });
       const err = new Error('API ' + path + ' failed (' + res.status + '): ' + text);
       err.status = res.status;
+      if(res.status === 423){ const lockedIt = /locked/i.test(text) && !/archived/i.test(text); applyServerFlags(!lockedIt, lockedIt); }   // the Worker's answer for "read-only"
       throw err;
     }
     return await res.json();
@@ -1017,7 +1215,7 @@ function stateSignature(cl, pu){
   const p = pu.map(function(x){
     return [x.id, x.status, x.severity, x.ownership, x.description, x.location, x.deviceName, x.resolvedBy, x.reportedBy].join('~');
   }).join('|');
-  return c + '#' + p;
+  return c + '#' + p + '@' + refSignature();   // what FPT recorded counts too
 }
 
 async function syncFromRemote(){
@@ -1026,9 +1224,18 @@ async function syncFromRemote(){
   const pollStartedAt = ++checkClock;
   try{
     const remote = await fetchRemoteState();
+    // The project may have been shipped while this page was open: pick up where the other side is, and show the toggle.
+    if(remote.stages && (remote.stages.field || null) !== (STAGES.field || null)){
+      STAGES = {fpt: remote.stages.fpt || STAGES.fpt, field: remote.stages.field || null};
+      if(currentProjectMeta) currentProjectMeta.stages = STAGES;
+      renderStageHeader();
+      if(READ_ONLY) applyReadOnly();   // the banner's wording differs once the project is shipped
+    }
+    if(typeof remote.archived === 'boolean') applyServerFlags(remote.archived, remote.locked === true);
     const wasEnabled = syncEnabled;
     const before = stateSignature(checklist, punches);
     checklist = mergeRemoteChecklist(remote.checklist || {}, pollStartedAt);
+    if(remote.reference) FPT_REF = {checklist: remote.reference.checklist || {}, punches: remote.reference.punches || []};
     const remoteIds = {};
     (remote.punches || []).forEach(function(p){ remoteIds[p.id] = true; });
     // keep punch items that haven't reached the server yet, and ones that did just now (this poll may predate them)
@@ -1062,6 +1269,7 @@ async function syncFromRemote(){
 
 // ---------- writes ----------
 async function submitAddLocation(){
+  if(READ_ONLY) return;
   const input = document.getElementById('newLocationName');
   const name = tidyText(input ? input.value : locationDraftText);
   if(!name) return;
@@ -1081,6 +1289,7 @@ async function submitAddLocation(){
 }
 
 async function submitAddDevice(){
+  if(READ_ONLY) return;
   const location = addingDeviceFor;
   const getVal = function(id){ const el = document.getElementById('newDevice_' + id); return el ? tidyText(el.value) : ''; };
   const fields = {
@@ -1112,6 +1321,7 @@ async function submitAddDevice(){
 }
 
 function submitNoteEdit(deviceId){
+  if(READ_ONLY) return;
   const dev = DEVICE_BY_ID[deviceId];
   if(!dev) return;
   const ta = document.getElementById('editNoteText');
@@ -1133,6 +1343,7 @@ function persistChecklist(deviceId){
   saveCache();
 }
 function toggleCheck(deviceId, key){
+  if(READ_ONLY) return;
   const cur = getCheck(deviceId);
   const next = Object.assign({}, cur);
   next[key] = (cur[key] === null || cur[key] === undefined) ? 'pass' : (cur[key] === 'pass' ? 'fail' : null);
@@ -1144,6 +1355,7 @@ function toggleCheck(deviceId, key){
   }
 }
 function submitPunch(deviceId){
+  if(READ_ONLY) return;
   const dev = DEVICE_BY_ID[deviceId];
   const desc = (punchDraftText[deviceId] || document.getElementById('punchDesc').value || '').trim();
   if(!desc) return;
@@ -1162,6 +1374,7 @@ function submitPunch(deviceId){
   sendPunch(item);
 }
 function submitLocationPunch(){
+  if(READ_ONLY) return;
   const desc = (locationPunchDraft || (document.getElementById('locationPunchDesc') || {}).value || '').trim();
   if(!desc) return;
   const cid = newClientId();
@@ -1180,6 +1393,7 @@ function submitLocationPunch(){
   sendPunch(item);
 }
 function toggleResolve(punchId){
+  if(READ_ONLY) return;
   const p = punches.find(function(x){ return x.id === punchId; });
   if(!p) return;
   p.status = p.status === 'open' ? 'resolved' : 'open';
@@ -1193,6 +1407,7 @@ function toggleResolve(punchId){
 }
 
 function submitPunchEdit(punchId){
+  if(READ_ONLY) return;
   const p = punches.find(function(x){ return x.id === punchId; });
   if(!p) return;
   const desc = (editDraftText[punchId] !== undefined ? editDraftText[punchId] : (document.getElementById('editPunchDesc') || {}).value || '').trim();
@@ -1214,6 +1429,7 @@ function submitPunchEdit(punchId){
 // activity email reports it. Like every other change it is saved on this device until the server
 // confirms, so deleting works offline too.
 function deletePunchItem(punchId){
+  if(READ_ONLY) return;
   const p = punches.find(function(x){ return x.id === punchId; });
   if(!p) return;
   const what = String(p.description || '');
@@ -1823,6 +2039,7 @@ window.addEventListener('pageshow', function(e){ if(e.persisted && currentProjec
 
 // ---------- events ----------
 document.getElementById('content').addEventListener('click', function(e){
+  if(READ_ONLY && e.target.closest(WRITE_CONTROLS)) return;   // an archived or locked side is read-only
   const locCard = e.target.closest('[data-loc]');
   if(locCard){ currentLocation = locCard.getAttribute('data-loc'); view = 'location-detail'; searchQuery=''; document.getElementById('searchInput').value=''; renderContent(); return; }
 
@@ -2247,11 +2464,23 @@ async function boot(){
 
   loadCache();
   loadOpenSections();
+  STAGE = (currentProjectMeta && currentProjectMeta.stage) || 'fpt';
+  STAGES = (currentProjectMeta && currentProjectMeta.stages) || {fpt: currentProject, field: null};
+  READ_ONLY_REASON = readOnlyReasonFor(currentProjectMeta);
+  READ_ONLY = !!READ_ONLY_REASON;
+  renderStageHeader();
   restorePendingChecks();
   restorePendingOps();
-  applyPendingOps();
+  if(READ_ONLY){
+    // Work left over from before the side was archived or locked is not replayed (the server would refuse it); say so.
+    const lost = discardUnsavedWork();
+    applyReadOnly();
+    tellArchivedLoss(lost);
+  }else{
+    applyPendingOps();
+  }
   renderContent();
-  restoreDraft();
+  if(!READ_ONLY) restoreDraft();   // a read-only side cannot take a punch item, so a saved draft stays saved instead of reopening a form
 
   // Real-time push (onSnapshot) isn't available with this backend, so instead
   // we do an immediate sync on load, then poll on an interval. Every write

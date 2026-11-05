@@ -57,7 +57,7 @@ var PDOffline = (function(){
       // punch items still waiting to be sent exist only on this device - never overwrite them
       var key = 'pd_commissioning_cache_' + id + '_' + side;
       var waiting = ((read(key) || {}).punches || []).filter(function(p){ return String(p.id).indexOf('local-') === 0; });
-      var ok2 = write(key, {checklist: state.checklist || {}, punches: (state.punches || []).concat(waiting)});
+      var ok2 = write(key, {checklist: state.checklist || {}, punches: (state.punches || []).concat(waiting), reference: state.reference || {checklist: {}, punches: []}});
       if(!ok1 || !ok2) throw new Error('not enough storage on this device');
       return (data.devices || []).length;
     });
@@ -69,7 +69,7 @@ var PDOffline = (function(){
       return api('/api/projects?email=' + encodeURIComponent(email) + '&deviceType=' + side, {method: 'GET'}).then(function(d){ return {side: side, projects: d.projects || []}; });
     })).then(function(lists){
       var jobs = [];
-      lists.forEach(function(l){ l.projects.filter(function(p){ return !p.archived; }).forEach(function(p){ jobs.push({id: p.id, name: p.name, side: l.side}); }); });
+      lists.forEach(function(l){ l.projects.filter(function(p){ return !p.archived; }).forEach(function(p){ jobs.push({id: p.id, name: p.name, side: l.side}); if(p.fieldId) jobs.push({id: p.fieldId, name: p.name + ' (Field)', side: l.side}); }); });   // a shipped project has two sides to save
       var failed = [], done = 0;
       return jobs.reduce(function(chain, job){
         return chain.then(function(){

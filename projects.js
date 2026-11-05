@@ -143,8 +143,17 @@ function render(){
     byRegion[r].push(p);
   });
 
+  //A shipped project is one card. It opens on the side the person used last, and on the field side if they have not chosen yet
+  //once a project is shipped that is where the work is. (The app remembers the choice each time it is switched)
+  function openIdFor(p){
+    if(!p.fieldId) return p.id;
+    let stage = null;
+    try{ stage = localStorage.getItemn('pd_stage_' + p.id); }catch(e){}
+    return stage === 'fpt' ? p.id : p.fieldId;
+  } 
+
   function cardHtml(p){
-    return '<a class="loc-card" href="index.html?project=' + encodeURIComponent(p.id) + '&type=' + DEVICE_TYPE + '" style="text-decoration:none;display:block;">'
+    return '<a class="loc-card" href="index.html?project=' + encodeURIComponent(openIdFor(p)) + '&type=' + DEVICE_TYPE + '" style="text-decoration:none;display:block;">'
       + '<div class="name">' + esc(p.name) + '</div>'
       + '<div class="meta">' + esc(p.shortName || '') + (p.shortName ? ' &middot; ' : '') + p.deviceCount + ' device' + (p.deviceCount===1?'':'s') + '</div>'
       + '</a>';
@@ -178,14 +187,14 @@ function render(){
 
 //The list is kept on the device after every successful load, so it can still be shown
 //with no connection (for the same emails, whats visible depends on who is asking).
-function listCacheKey(){ return 'pd_projects_cache' + DEVICE_TYPE; }
+function listCacheKey(){ return 'pd_projects_cache_' + DEVICE_TYPE; }
 function saveListCache(email){
   try{ localStorage.setItem(listCacheKey(), JSON.stringify({email: email, savedAt: new Date().toISOString(), projects: allProjects})); }catch(e){}
 }
 function readListCache(email){
   try{
     const c = JSON.parse(localStorage.getItem(listCacheKey()) || 'null');
-    return ( c && c.email ===email && Array.isArray(c.projects)) ? c : null;
+    return (c && c.email === email && Array.isArray(c.projects)) ? c : null;
   }catch(e){ return null; }
 }
 
