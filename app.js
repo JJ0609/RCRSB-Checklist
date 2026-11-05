@@ -63,6 +63,7 @@ let currentSideCounts = null;
 let DEVICES = [];
 let LOCATIONS = [];
 let SERVER_LOCATIONS = [];
+let LOCATION_NOTES = {};   // room name -> the room's note (the sheet's General Note column), shown under the room name
 let DEVICE_BY_ID = {};
 
 let checklist = {};   // deviceId -> {power,network,function}
@@ -260,7 +261,7 @@ function renderLocations(){
   let locs = LOCATIONS;
   if(q){
     locs = LOCATIONS.filter(function(loc){
-      if(matchesSearch(loc.name)) return true;
+      if(matchesSearch(loc.name) || matchesSearch(LOCATION_NOTES[loc.name] || '')) return true;
       return loc.devices.some(deviceMatchesSearch);
     });
   }
@@ -314,6 +315,16 @@ function portSummary(dev){
     if(p.port) s += ' / Port ' + p.port; else s += ' / port TBD';
     return s;
   }).join(', ');
+}
+
+// The room's own note (the sheet's General Note column), right under the room name. Shown as plain text: it is
+// escaped, and the line breaks typed in the sheet are kept.
+function locationNoteHtml(name){
+  const note = LOCATION_NOTES[name];
+  if(!note) return '';
+  return '<div class="loc-note" style="margin:6px 0 8px;padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.45;color:var(--ink);white-space:pre-line;overflow-wrap:anywhere;">'
+    + '<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:2px;">Location notes</div>'
+    + esc(note) + '</div>';
 }
 
 function deviceMatchesSearch(d){
@@ -381,7 +392,7 @@ function renderLocationDetail(){
   }
   let html = '';
   html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
-  html += '<div class="loc-header"><h2>' + esc(loc.name) + '</h2>'
+  html += '<div class="loc-header"><h2>' + esc(loc.name) + '</h2>' + locationNoteHtml(loc.name)
     + '<div class="meta">' + loc.devices.length + ' devices &middot; ' + st.tested + '/' + st.total + ' tested'
     + (st.fails ? (' &middot; <span style="color:var(--fail);font-weight:700">' + st.fails + ' failed</span>') : '')
     + '</div></div>';
@@ -769,7 +780,7 @@ function deviceCacheKey(){
 }
 function saveDeviceCache(meta, devices, locations){
   try{
-    localStorage.setItem(deviceCacheKey(), JSON.stringify({meta: meta, devices: devices, locations: locations || [], cachedAt: new Date().toISOString()}));
+    localStorage.setItem(deviceCacheKey(), JSON.stringify({meta: meta, devices: devices, locations: locations || [], locationNotes: LOCATION_NOTES, cachedAt: new Date().toISOString()}));
   }catch(e){}
 }
 function loadDeviceCache(){
@@ -2165,6 +2176,7 @@ async function boot(){
     const data = await fetchDevicesAndMeta();
     DEVICES = data.devices || [];
     SERVER_LOCATIONS = data.locations || [];
+    LOCATION_NOTES = data.locationNotes || {};
     currentProjectMeta = data.project || {name: projectId, shortName: projectId};
     currentAccess = data.access || currentAccess;
     currentSideCounts = data.deviceCounts || currentSideCounts;
@@ -2179,6 +2191,7 @@ async function boot(){
     if(cached && cached.devices && cached.devices.length){
       DEVICES = cached.devices;
       SERVER_LOCATIONS = cached.locations || [];
+      LOCATION_NOTES = cached.locationNotes || {};
       currentProjectMeta = cached.meta || {name: projectId, shortName: projectId};
       currentSideCounts = (cached.meta && cached.meta.deviceCounts) || null;
       updateSwitchAvailability();

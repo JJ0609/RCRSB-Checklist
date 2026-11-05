@@ -1129,7 +1129,7 @@ function notesText(devices){
 const COMMISSIONING_HEADERS = {
   order: 'order', level: 'level', room: 'room', category: 'category', name: 'name',
   makemodel: 'model', model: 'model', ip: 'ip', ipaddress: 'ip', mac: 'mac', macaddress: 'mac',
-  id: 'ipid', ipid: 'ipid', zone: 'zone', ch: 'channel', channel: 'channel', switchport: 'ports', note: 'note'
+  id: 'ipid', ipid: 'ipid', zone: 'zone', ch: 'channel', channel: 'channel', switchport: 'ports', devicenote: 'devicenote', generalnote: 'locationnote'
 };
 const COMMISSIONING_CATEGORIES = [['control', 'Control'], ['audio', 'Audio'], ['video', 'Video']];
 const MAC_PATTERN = /^(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}$|^[0-9a-f]{12}$|^(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}$/i;
@@ -1200,7 +1200,7 @@ function parseCommissioningSheet(workbook){
     devices.push({
       name: name, status: '', level: text(r, cols.level), location: normalizeLocation(text(r, cols.room)),
       zone: text(r, cols.zone), channel: text(r, cols.channel), model: text(r, cols.model), ip: text(r, cols.ip),
-      ipid: text(r, cols.ipid).replace(/^IP\s*ID\s*/i, ''), avio: '', note: text(r, cols.note),
+      ipid: text(r, cols.ipid).replace(/^IP\s*ID\s*/i, ''), avio: '', devicenote: text(r, cols.devicenote), generalnote: text(r, cols.locationnote),
       category: category, sortOrder: order, mac: mac, ports: sp.ports
     });
   }
