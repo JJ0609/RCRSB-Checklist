@@ -322,8 +322,8 @@ function portSummary(dev){
 function locationNoteHtml(name){
   const note = LOCATION_NOTES[name];
   if(!note) return '';
-  return '<div class="loc-note" style="margin:6px 0 8px;padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.45;color:var(--topbar-warn);white-space:pre-line;overflow-wrap:anywhere;">'
-    + '<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--topbar-warn);margin-bottom:2px;">Location notes</div>'
+  return '<div class="loc-note" style="margin:6px 0 8px;padding:9px 11px;background:var(--topbar-warn);border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.45;color:var(--ink);white-space:pre-line;overflow-wrap:anywhere;">'
+    + '<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:2px;">Location notes</div>'
     + esc(note) + '</div>';
 }
 
