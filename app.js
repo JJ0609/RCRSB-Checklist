@@ -382,6 +382,28 @@ function sectionHtml(g, open){
   return html + '</div>';
 }
 
+//The Previous/Next Buttons at the top right of the room Page, DIsabled on the first/last room
+//Hovering shows what room the button will lead to
+function roomStepButtonHtml(dir, room){
+  const label = dir === 'prev' ? '&larr; Previous' : 'Next &rarr;';
+  const base = '<button class="back-btn" id="' + dir + 'RoomBtn" data-room-step="' + dir + '"';
+  if(!room) return base + ' disabled aria-label="' + (dir === 'prev' ? 'No previous room' : 'No next room') + '" style="opacity:.4;cursor:default;pointer-events:none;">' + label + '</button>';
+  return base + ' title="' + esc(room.name) + '" aria-label="' + (dir === 'prev' ? 'Previous room: ' : 'Next room: ') + esc(room.name) + '">' + label + '</button>';
+}
+//Step to the room before or after this one, in the same order as the room list
+//Acts the same as when you click on the room directly
+function goToAdjacentRoom(dir){
+  const i = LOCATIONS.findIndex(function(l){ return l.name === currentLocation; });
+  const next = i === -1 ? null : LOCATIONS[i + (dir === 'prev' ? -1 : 1)];
+  if(!next) return;
+  currentLocation = next.name;
+  view = 'location-detail';
+  searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  renderContent();
+  window.scrollTo(0, 0);
+}
+
 function renderLocationDetail(){
   const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
   if(!loc){ view='locations'; renderContent(); return; }
@@ -391,7 +413,13 @@ function renderLocationDetail(){
     devices = devices.filter(deviceMatchesSearch);
   }
   let html = '';
-  html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
+  const roomIndex = LOCATIONS.indexOf(loc);
+  html += '<div class="back-row" style="justify-content:space-between;">'
+  + '<button class="back-btn" id="backBtn">&larr; All locations</button>'
+  + '<div style="display:flex;ghap:8px;">'
+  + roomStepButtonHtml('prev', roomIndex > 0 ? LOCATIONS[roomIndex - 1] : null)
+  + roomStepButtonHtml('next', roomIndex !== -1 && roomIndex < LOCATIONS.length - 1 ? LOCATIONS[roomIndex + 1] : null)
+  + '</div></div>';
   html += '<div class="loc-header"><h2>' + esc(loc.name) + '</h2>' + locationNoteHtml(loc.name)
     + '<div class="meta">' + loc.devices.length + ' devices &middot; ' + st.tested + '/' + st.total + ' tested'
     + (st.fails ? (' &middot; <span style="color:var(--fail);font-weight:700">' + st.fails + ' failed</span>') : '')
@@ -1868,6 +1896,9 @@ document.getElementById('content').addEventListener('click', function(e){
   const backBtn = e.target.closest('#backBtn');
   if(backBtn){ view = 'locations'; renderContent(); return; }
 
+  const roomStep = e.target.closest('[data-room-step]');
+  if(roomStep){ if(!roomStep.disabled) goToAdjacentRoom(roomStep.getAttribute('data-room-step')); return; }
+  
   const checkPill = e.target.closest('.check-pill');
   if(checkPill){ toggleCheck(checkPill.getAttribute('data-device'), checkPill.getAttribute('data-check')); return; }
 
