@@ -247,7 +247,7 @@ document.getElementById('projectList').addEventListener('change', async function
         ', ' + result.checklistUpdated + ' checklist row' + (result.checklistUpdated===1?'':'s') +
         ', ' + result.punchesUpdated + ' punch update' + (result.punchesUpdated===1?'':'s') +
         ', ' + result.punchesCreated + ' new punch item' + (result.punchesCreated===1?'':'s') + '.' +
-        (unmatched > 0 ? ' ' + unmatched + ' device ID' + (unmatched===1?'':'s') + ' in tthe file ' + (unmatched===1?'was':'were') + ' not found in this project.' : '');
+        (unmatched > 0 ? ' ' + unmatched + ' device ID' + (unmatched===1?'':'s') + ' in the file ' + (unmatched===1?'was':'were') + ' not found in this project.' : '');
       setTimeout(loadProjectList, 5000);
     }catch(e){
       console.error(e);
@@ -329,11 +329,11 @@ document.getElementById('projectList').addEventListener('change', async function
       if(statusEl) statusEl.textContent = 'Syncing...';
       const result = await adminFetch('/api/admin/projects/sync-devices', {
         method: 'POST',
-        body: JSON.stringify({id: id, devices: newDevices, deviceType: deviceType})
+        body: JSON.stringify({id: id, devices: newDevices, deviceType: deviceType, locationNotes: newDevices.locationNotes})
       });
       if(statusEl) statusEl.textContent =
         'Synced ' + typeLabel + ': ' + result.deviceCount + ' device' + (result.deviceCount===1?'':'s') + ' added/updated, ' +
-        result.devicesDeleted + ' removed, ' + result.locationsDeleted + ' location' + (result.locationsDeleted===1?'':'s') + ' removed.';
+        result.devicesDeleted + ' removed, ' + result.locationsDeleted + ' location' + (result.locationsDeleted===1?'':'s') + ' removed.' + roomNotesStatus(newDevices, result);
       setTimeout(loadProjectList, 5000);
     }catch(e){
       console.error(e);
@@ -383,9 +383,9 @@ document.getElementById('projectList').addEventListener('change', async function
     if(statusEl) statusEl.textContent = 'Uploading ' + devices.length + ' ' + typeLabel + ' devices...';
     const result = await adminFetch('/api/admin/projects/update-devices', {
       method: 'POST',
-      body: JSON.stringify({id: id, devices: devices, deviceType: deviceType})
+      body: JSON.stringify({id: id, devices: devices, deviceType: deviceType, locationNotes: devices.locationNotes})
     });
-    if(statusEl) statusEl.textContent = 'Updated ' + result.deviceCount + ' ' + typeLabel + ' devices just now.';
+    if(statusEl) statusEl.textContent = 'Updated ' + result.deviceCount + ' ' + typeLabel + ' devices just now.' + roomNotesStatus(devices, result);
     setTimeout(loadProjectList, 5000);
   }catch(e){
     console.error(e);
@@ -967,7 +967,9 @@ function readExtractedSheet(ws){
     }
     return {
       rows: rows,
-      placed: cols.roomName !== -1 || cols.rack !== -1,   // devices placed in rooms
+      // A room name, or a column that is exactly "RACK", marks the drawing extraction's list of devices placed in rooms.
+      // A column like "Rack ↑↓" on a normal Info Sheet is only a sort helper and must not make the whole file look extracted.
+      placed: cols.roomName !== -1 || (cols.rack !== -1 && /^\s*rack\s*$/i.test(String(grid[r][cols.rack]))),
       equipMark: keys.indexOf('equipmark') !== -1 || keys.indexOf('equipmentmark') !== -1
     };
   }
@@ -1122,17 +1124,44 @@ function notesText(devices){
 //   Order -> sortOrder (kept as text, "0101", so the sheet's own order survives and sorts correctly)
 //   Room -> location          Category -> category (control / audio / video; anything else is left blank)
 //   ID -> ipid (the "IP ID " prefix is dropped)     Ch -> channel     Switch Port -> ports
+//   Device Note (or just Note) -> the device's note, shown on its card
+//   General Note -> the ROOM's note, shown under the room name. It belongs to the room, not to a device, so it is not
+//     stored on any device: it is gathered per room (devices.locationNotes) and sent beside the device list. It can be typed
+//     once on a room's first row or repeated on every row; different notes on different rows of a room are all kept.
 // Audio rows are of two kinds: devices (amps, DSPs - they have a model and an IP) and speaker ZONES (a zone
 // number and an amp output, nothing else). Zone names repeat ("POOL AREA" nine times), so a zone's id is built
 // from its name AND its zone number - an id made from the name alone would be told apart only by position, and
 // re-uploading after a row was inserted would move saved test results onto the wrong zone.
+// A header containing the word "model" is the model column, so "Make | Model" and "Manufacturer | Model" both work.
+// "Category" is what marks a tab as the commissioning list (Component Info has none), so it is the one column
+// whose name has to be right; the others have a few accepted spellings.
 const COMMISSIONING_HEADERS = {
-  order: 'order', level: 'level', room: 'room', category: 'category', name: 'name',
+  order: 'order', level: 'level', room: 'room', location: 'room', installedlocation: 'room', category: 'category',
+  name: 'name', componentname: 'name', devicename: 'name',
   makemodel: 'model', model: 'model', ip: 'ip', ipaddress: 'ip', mac: 'mac', macaddress: 'mac',
-  id: 'ipid', ipid: 'ipid', zone: 'zone', ch: 'channel', channel: 'channel', switchport: 'ports', devicenote: 'devicenote', generalnote: 'locationnote'
+  id: 'ipid', ipid: 'ipid', zone: 'zone', ch: 'channel', channel: 'channel', switchport: 'ports',
+  // Two kinds of note: one about a DEVICE (what the column "Note" always was), one about the ROOM.
+  note: 'devicenote', notes: 'devicenote', devicenote: 'devicenote', devicenotes: 'devicenote',
+  generalnote: 'locationnote', generalnotes: 'locationnote', locationnote: 'locationnote', locationnotes: 'locationnote',
+  roomnote: 'locationnote', roomnotes: 'locationnote'
 };
 const COMMISSIONING_CATEGORIES = [['control', 'Control'], ['audio', 'Audio'], ['video', 'Video']];
 const MAC_PATTERN = /^(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}$|^[0-9a-f]{12}$|^(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}$/i;
+
+// Which field a header means. Exact spellings first; then by the words in it, so "Location (General) Notes" or
+// "Notes - Room" are still understood rather than silently ignored: a header with "model" in it is the model; one with
+// "note" in it is the ROOM's note when it mentions the room, location or general, the DEVICE's note when it mentions the
+// device, and the device's note when it says nothing more (a plain "Note" or "Notes", as the sheet always had).
+function commissioningField(key){
+  if(COMMISSIONING_HEADERS[key]) return COMMISSIONING_HEADERS[key];
+  if(key.indexOf('model') !== -1) return 'model';
+  if(key.indexOf('note') !== -1){
+    if(/device|equip|component/.test(key)) return 'devicenote';
+    if(/general|location|room|area|space/.test(key)) return 'locationnote';
+    return 'devicenote';
+  }
+  return undefined;
+}
 // The tab, found by its header row (a tab called "Commissioning" is tried first).
 function findCommissioningSheet(workbook){
   const names = workbook.SheetNames.slice().sort(function(a, b){ return (xKey(b) === 'commissioning' ? 1 : 0) - (xKey(a) === 'commissioning' ? 1 : 0); });
@@ -1141,19 +1170,26 @@ function findCommissioningSheet(workbook){
     if(!ws || !ws['!ref']) continue;
     const range = XLSX.utils.decode_range(ws['!ref']);
     for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 9); r++){
-      const cols = {};
+      const cols = {}, headerText = {}, duplicates = [];
+      let ownExport = false;
       for(let c = range.s.c; c <= Math.min(range.e.c, range.s.c + 40); c++){
         const cell = ws[XLSX.utils.encode_cell({r: r, c: c})];
-        const field = COMMISSIONING_HEADERS[xKey(cell ? cell.v : '')];
-        if(field && cols[field] === undefined) cols[field] = c;
+        const key = xKey(cell ? cell.v : '');
+        if(key === 'deviceid') ownExport = true;   // only this app's own Excel export has a Device ID column
+        const field = commissioningField(key);
+        if(field){
+          if(cols[field] === undefined){ cols[field] = c; headerText[field] = String(cell.v).trim(); }
+          else duplicates.push(String(cell.v).trim());
+        }
       }
-      if(cols.name !== undefined && cols.room !== undefined && cols.category !== undefined){
-        return {name: names[n], ws: ws, headerRow: r, cols: cols, range: range};
+      if(!ownExport && cols.name !== undefined && cols.room !== undefined && cols.category !== undefined){
+        return {name: names[n], ws: ws, headerRow: r, cols: cols, headerText: headerText, duplicates: duplicates, range: range};
       }
     }
   }
   return null;
 }
+
 // "R1-SWI-01 / Port 2" -> [{switch: "R1-SWI-01", port: "2"}]; several can be separated by , or ;
 function parseSwitchPorts(text){
   if(!text) return {ports: [], odd: false};
@@ -1165,6 +1201,7 @@ function parseSwitchPorts(text){
   });
   return {ports: ports, odd: odd};
 }
+
 function parseCommissioningSheet(workbook){
   const found = findCommissioningSheet(workbook);
   if(!found) return null;
@@ -1176,35 +1213,60 @@ function parseCommissioningSheet(workbook){
     if(!cell || cell.v == null) return '';
     return String(cell.t === 'n' && cell.w != null ? cell.w : cell.v).replace(/\s+/g, ' ').trim();
   };
+
+  // A room note keeps the line breaks typed in the cell (Alt+Enter); everything else is tidied like any other text.
+  const noteText = function(r, c){
+    if(c === undefined) return '';
+    const cell = ws[XLSX.utils.encode_cell({r: r, c: c})];
+    if(!cell || cell.v == null) return '';
+    return String(cell.v).replace(/\r\n?/g, '\n').split('\n').map(function(s){ return s.replace(/[ \t]+/g, ' ').trim(); }).filter(Boolean).join('\n');
+  };
   const devices = [];
+  const roomNotes = {};   // room -> the different General Notes found on its rows, in order
   const unknownCats = {}, badMacs = [], oddPorts = [];
   let noCategory = 0, formulasWithoutResult = 0;
   for(let r = found.headerRow + 1; r <= found.range.e.r; r++){
     const name = text(r, cols.name);
+    // A room's note is read from any row that names the room, even a heading row with no device on it.
+    const room = normalizeLocation(text(r, cols.room));
+    const general = noteText(r, cols.locationnote);
+    if(room && general){
+      const list = roomNotes[room] || (roomNotes[room] = []);
+      if(list.indexOf(general) === -1) list.push(general);
+    }
     if(!name) continue;
     // A formula whose result was never saved reads as blank - say so rather than import blanks quietly.
     Object.keys(cols).forEach(function(k){
       const cell = ws[XLSX.utils.encode_cell({r: r, c: cols[k]})];
       if(cell && cell.f !== undefined && cell.v === undefined) formulasWithoutResult++;
     });
+
     let order = text(r, cols.order);
     if(/^\d+$/.test(order) && order.length < 4) order = ('0000' + order).slice(-4);
     const catRaw = text(r, cols.category), catKey = catRaw.toLowerCase();
     const known = COMMISSIONING_CATEGORIES.some(function(c){ return c[0] === catKey; });
     const category = known ? catKey : '';
     if(!catRaw) noCategory++; else if(!known) unknownCats[catRaw] = (unknownCats[catRaw] || 0) + 1;
+
     let mac = text(r, cols.mac);
     if(mac && !MAC_PATTERN.test(mac)){ badMacs.push(name + ': "' + mac + '"'); mac = ''; }
     const sp = parseSwitchPorts(text(r, cols.ports));
     if(sp.odd) oddPorts.push(name);
+
     devices.push({
-      name: name, status: '', level: text(r, cols.level), location: normalizeLocation(text(r, cols.room)),
+      name: name, status: '', level: text(r, cols.level), location: room,
       zone: text(r, cols.zone), channel: text(r, cols.channel), model: text(r, cols.model), ip: text(r, cols.ip),
-      ipid: text(r, cols.ipid).replace(/^IP\s*ID\s*/i, ''), avio: '', devicenote: text(r, cols.devicenote), generalnote: text(r, cols.locationnote),
+      ipid: text(r, cols.ipid).replace(/^IP\s*ID\s*/i, ''), avio: '', note: text(r, cols.devicenote),
       category: category, sortOrder: order, mac: mac, ports: sp.ports
     });
   }
   if(!devices.length) throw new Error('The "' + found.name + '" tab has a header row but no devices below it.');
+  // Only when the tab HAS a General Note column: a file without one must leave the saved room notes alone.
+  if(cols.locationnote !== undefined){
+    devices.locationNotes = {};
+    Object.keys(roomNotes).forEach(function(k){ devices.locationNotes[k] = roomNotes[k].join('\n'); });
+  }
+
   // Ids. A speaker zone is told apart by its zone number; anything else that still repeats gets -2, -3.
   const isZone = function(d){ return d.category === 'audio' && !!d.zone && !d.model && !d.ip; };
   const seen = {};
@@ -1214,6 +1276,7 @@ function parseCommissioningSheet(workbook){
     seen[base] = n + 1;
     d.id = n === 0 ? base : (base + '-' + (n + 1));
   });
+
   // What was read, in words - shown before anything is uploaded.
   const notes = [];
   const count = {control: 0, audio: 0, video: 0, other: 0};
@@ -1226,6 +1289,32 @@ function parseCommissioningSheet(workbook){
   const rooms = {}; devices.forEach(function(d){ rooms[d.location] = true; });
   notes.push('Read ' + devices.length + ' rows in ' + Object.keys(rooms).length + ' rooms from the "' + found.name + '" tab: ' + parts.join(', ') + '.');
   notes.push('Only this tab is read. Nothing from the other tabs (including any login details on them) is imported, and the switch ports come from its Switch Port column.');
+  // Which columns were found, and above all whether models came through - so a file that quietly loses them
+  // says so before anything is uploaded.
+  const COLUMN_LABELS = {order: 'Order', level: 'Level', room: 'Room', category: 'Category', name: 'Name', model: 'Make | Model', ip: 'IP', mac: 'MAC', ipid: 'ID', zone: 'Zone', channel: 'Ch', ports: 'Switch Port', devicenote: 'Device Note'};
+  const realDevices = devices.filter(function(d){ return !isZone(d); });
+  const noModel = realDevices.filter(function(d){ return !d.model; });
+  if(cols.model === undefined){
+    notes.push('WARNING: no Make | Model column was found on the "' + found.name + '" tab (a header containing the word "Model"), so no device has a model.');
+  }else{
+    const have = realDevices.length - noModel.length;
+    notes.push((have === 0 ? 'WARNING: ' : '') + 'Make | Model was read for ' + have + ' of ' + realDevices.length + ' devices' + (zones ? ' (speaker zones have none, which is normal)' : '') +
+      (noModel.length ? '; none on ' + noModel.slice(0, 3).map(function(d){ return d.name; }).join(', ') + (noModel.length > 3 ? ' and ' + (noModel.length - 3) + ' more' : '') : '') + '.' +
+      (have === 0 ? ' If the column looks filled in Excel, its formulas have no saved results: open the file in Excel, save it, and upload it again.' : ''));
+  }
+  const notOnTab = Object.keys(COLUMN_LABELS).filter(function(k){ return k !== 'model' && cols[k] === undefined; });
+  if(notOnTab.length) notes.push('Not on this tab, so left blank: ' + notOnTab.map(function(k){ return COLUMN_LABELS[k]; }).join(', ') + '.');
+  if(devices.locationNotes){
+    const noted = Object.keys(devices.locationNotes);
+    const shown = noted.filter(function(k){ return rooms[k]; });
+    const several = shown.filter(function(k){ return roomNotes[k].length > 1; });
+    notes.push('Room notes read from the "' + found.headerText.locationnote + '" column: ' + shown.length + ' of ' + Object.keys(rooms).length + ' rooms have one (shown under the room name).' +
+      (several.length ? ' ' + several.length + ' room' + (several.length === 1 ? ' has' : 's have') + ' more than one different note, kept one per line (' + several.slice(0, 3).join(', ') + ').' : '') +
+      (noted.length > shown.length ? ' ' + (noted.length - shown.length) + ' note' + (noted.length - shown.length === 1 ? ' is' : 's are') + ' on a room with no devices, so ' + (noted.length - shown.length === 1 ? 'it' : 'they') + ' will not show anywhere.' : '') +
+      ' Update adds or changes room notes; Sync makes them match this file exactly.');
+  }
+  if(found.headerText.devicenote) notes.push('Device notes read from the "' + found.headerText.devicenote + '" column.');
+  if(found.duplicates.length) notes.push('More than one column looked like the same thing, and only the first of each is read. Ignored: ' + found.duplicates.slice(0, 4).map(function(h){ return '"' + h + '"'; }).join(', ') + '.');
   const zoneNames = {};
   devices.filter(isZone).forEach(function(d){ zoneNames[d.name] = (zoneNames[d.name] || 0) + 1; });
   const repeated = Object.keys(zoneNames).filter(function(k){ return zoneNames[k] > 1; });
@@ -1242,9 +1331,48 @@ function parseCommissioningSheet(workbook){
   devices.notes = notes;
   return devices;
 }
+
+// The first few rows of a tab as text - to show what a header row actually contains when it was not recognised.
+function sheetHeaderPreview(ws){
+  if(!ws || !ws['!ref']) return '(empty)';
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  let best = [];
+  for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 9); r++){
+    const cells = [];
+    for(let c = range.s.c; c <= Math.min(range.e.c, range.s.c + 20); c++){
+      const cell = ws[XLSX.utils.encode_cell({r: r, c: c})];
+      if(cell && cell.v != null && String(cell.v).trim() !== '') cells.push(String(cell.v).trim().slice(0, 24));
+    }
+    if(cells.length > best.length) best = cells;
+  }
+  return best.length ? best.slice(0, 14).join(', ') : '(empty)';
+}
+function ignoredCommissioningNote(workbook){
+  const name = workbook.SheetNames.find(function(n){ return xKey(n) === 'commissioning'; });
+  if(!name) return '';
+  return 'WARNING: this file has a "Commissioning" tab but it was NOT read - its header row has no Name, Room (or Location) and Category columns. Headers found: ' + sheetHeaderPreview(workbook.Sheets[name]) + '. The devices came from the other tabs instead.';
+}
+// What to add to the "done" message after an upload, so a room note that did not get saved is visible straight away.
+// A Worker that has not been updated with the new index.js ignores room notes and says nothing, which would otherwise
+// look exactly like "the notes were never in the file".
+function roomNotesStatus(devices, result){
+  const sent = devices && devices.locationNotes ? Object.keys(devices.locationNotes).length : 0;
+  if(!sent) return '';
+  if(!result || result.locationNotes === undefined){
+    return ' WARNING: ' + sent + ' room note' + (sent === 1 ? ' was' : 's were') + ' sent, but the Worker did not confirm saving ' + (sent === 1 ? 'it' : 'them') + '. It probably still has the old index.js - paste the new one in and upload again.';
+  }
+  return ' ' + result.locationNotes + ' room note' + (result.locationNotes === 1 ? '' : 's') + ' saved.';
+}
+
 function parseWorkbook(workbook){
   const commissioning = parseCommissioningSheet(workbook);
   if(commissioning) return commissioning;
+  const devices = parseInfoSheetWorkbook(workbook);
+  const ignored = ignoredCommissioningNote(workbook);
+  if(ignored) devices.notes = (devices.notes || []).concat([ignored]);
+  return devices;
+}
+function parseInfoSheetWorkbook(workbook){
   const extractedTables = parseExtractedTables(workbook);
   if(extractedTables) return extractedTables;
   // Tolerates spacing variants ("Device Info", "DeviceInfo", "Device  Info")
@@ -1611,10 +1739,10 @@ document.getElementById('createBtn').addEventListener('click', async function(){
     showMsg(msgEl, 'Uploading ' + devices.length + ' devices...', 'info');
     const result = await adminFetch('/api/admin/projects', {
       method: 'POST',
-      body: JSON.stringify({id: id, name: name, shortName: shortName, region: region, devices: devices, deviceType: deviceType})
+      body: JSON.stringify({id: id, name: name, shortName: shortName, region: region, devices: devices, deviceType: deviceType, locationNotes: devices.locationNotes})
     });
 
-    showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' ' + typeLabel + ' devices.' + (devices.notes && devices.notes.length ? ' Notes on the file: ' + devices.notes.join(' ') : ''), 'ok');
+    showMsg(msgEl, 'Created "' + name + '" with ' + result.deviceCount + ' ' + typeLabel + ' devices.' + roomNotesStatus(devices, result) + (devices.notes && devices.notes.length ? ' Notes on the file: ' + devices.notes.join(' ') : ''), 'ok');
     document.getElementById('newName').value = '';
     document.getElementById('newShort').value = '';
     document.getElementById('newId').value = '';
