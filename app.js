@@ -26,7 +26,7 @@ const CATEGORIES = [
 function isZoneRow(d){ return !!d && d.category === 'audio' && !!d.zone && !d.model && !d.ip; }
 function checksFor(d){ return isZoneRow(d) ? CHECKS.filter(function(c){ return c.key === 'function'; }) : CHECKS; }
 const SEVERITIES = ['minor','major','critical'];
-const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration'];
+const OWNERSHIPS = ['Field Tech/Install', 'Programming', 'Configuration', 'Design'];
 // Sentinel for the shared location-punch form/state below, meaning "no
 // location at all - a project-wide item." Never collides with a real
 // location name (those always come from actual devices/locations).
@@ -1569,6 +1569,7 @@ function ownershipCellStyle(own){
   if(own === 'Field Tech/Install') return {bg: XL_COLORS.OWN_FIELD_BG, txt: XL_COLORS.OWN_FIELD_TXT};
   if(own === 'Programming') return {bg: XL_COLORS.OWN_PROGRAMMING_BG, txt: XL_COLORS.OWN_PROGRAMMING_TXT};
   if(own === 'Configuration') return {bg: XL_COLORS.OWN_CONFIG_BG, txt: XL_COLORS.OWN_CONFIG_TXT};
+  if(own === 'Design') return {bg: XL_COLORS.OWN_FIELD_BG, txt:XL_COLORS.OWN_FIELD_TXT};
   return {bg: XL_COLORS.GRAVEL_BG, txt: XL_COLORS.GRAVEL_TXT};
 }
 function statusCellStyle(status){
@@ -2386,7 +2387,7 @@ function restoreDraft(){
   if(dev){ openPunchFormFor = dev.id; punchDraftText[dev.id] = d.dev.text; }
   if(scopeOk){ addingLocationPunchFor = d.loc.scope; locationPunchDraft = d.loc.text; }
   if(['minor', 'major', 'critical'].indexOf(d.severity) !== -1) pendingSeverity = d.severity;
-  if(['Field Tech/Install', 'Programming', 'Configuration'].indexOf(d.ownership) !== -1) pendingOwnership = d.ownership;
+  if(['Field Tech/Install', 'Programming', 'Configuration', 'Design'].indexOf(d.ownership) !== -1) pendingOwnership = d.ownership;
 
   // Show where the draft lives (a device draft wins if there are two).
   searchQuery = '';
