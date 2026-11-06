@@ -2078,7 +2078,17 @@ window.addEventListener('pageshow', function(e){ if(e.persisted && currentProjec
 document.getElementById('content').addEventListener('click', function(e){
   if(READ_ONLY && e.target.closest(WRITE_CONTROLS)){ if(!looksReadOnly()) showLockedNotice(); return; }   // an archived or locked side is read-only
   const locCard = e.target.closest('[data-loc]');
-  if(locCard){ currentLocation = locCard.getAttribute('data-loc'); view = 'location-detail'; searchQuery=''; document.getElementById('searchInput').value=''; renderContent(); return; }
+  if(locCard){
+    currentLocation = locCard.getAttribute('data-loc');
+    // Came here by searching for a device on the room list: keep the search in the box, so the room opens already showing that device
+    // instead of making the person search for it again. (A search that only matched the room's name is cleared, as before.)
+    const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
+    const keepSearch = view === 'locations' && !!searchQuery.trim() && !!loc && loc.devices.some(deviceMatchesSearch);
+    view = 'location-detail';
+    if(!keepSearch){ searchQuery = ''; document.getElementById('searchInput').value = ''; }
+    renderContent();
+    return;
+  }
 
   const addLocationBtn = e.target.closest('#addLocationBtn');
   if(addLocationBtn){ addingLocation = true; locationDraftText = ''; renderContent(); return; }
