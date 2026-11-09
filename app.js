@@ -214,12 +214,13 @@ function hasFail(deviceId){
   return checksFor(DEVICE_BY_ID[deviceId]).some(function(chk){ return c[chk.key] === 'fail'; });
 }
 function locationStats(devices){
-  let tested = 0, fails = 0;
+  let tested = 0, fails = 0, passed = 0;
   devices.forEach(function(d){
     if(isTested(d.id)) tested++;
     if(hasFail(d.id)) fails++;
+    else if(isTested(d.id)) passed++;
   });
-  return {tested: tested, total: devices.length, fails: fails};
+  return {tested: tested, total: devices.length, fails: fails, passed: passed};
 }
 function openPunchCount(locationName){
   return punches.filter(function(p){ return p.status === 'open' && (!locationName || p.location === locationName); }).length;
@@ -279,11 +280,15 @@ function renderLocations(){
   locs.forEach(function(loc){
     const st = locationStats(loc.devices);
     const openCt = openPunchCount(loc.name);
-    const pct = st.total ? Math.round(100*st.tested/st.total) : 0;
+    const passPct = st.total ? 100*st.passed/st.total : 0;
+    const failPct = st.total ? 100*st.fails/st.total : 0;
     html += '<button class="loc-card" data-loc="' + esc(loc.name) + '">'
       + '<div class="name">' + esc(loc.name) + '</div>'
       + '<div class="meta">' + loc.devices.length + ' device' + (loc.devices.length===1?'':'s') + '</div>'
-      + '<div class="bar"><span style="width:' + pct + '%;background:' + (st.fails? 'var(--fail)':'var(--pass)') + '"></span></div>'
+      + '<div class="bar" title="' + st.passed + ' passed, ' + st.fails + ' failed, ' + (st.total - st.passed -st.fails) + ' not finished">'
+      + '<span style="width:' + passPct + '%;background:var(--pass)"></span>'
+      + '<span style="width:' + failPct + '%;background:var(--fail)"></span>'
+      +'</div>'
       + '<div class="footer">'
       + '<span style="color:var(--ink-soft)">' + st.tested + '/' + st.total + ' tested</span>'
       + locationBadgeHtml(st, openCt)
