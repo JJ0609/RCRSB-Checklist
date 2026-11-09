@@ -87,7 +87,7 @@ let view = 'locations';
 let currentLocation = null;
 let searchQuery = '';
 let punchStatusFilter = 'open';
-let punchLocationFilter = '';
+let punchOwnershipFilter = '';
 let openPunchFormFor = null;
 let editingPunchId = null;
 let editingNotesId = null;
@@ -681,18 +681,16 @@ function deviceCardHtml(d, showLocation){
 function renderPunchList(){
   let list = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
   if(punchStatusFilter !== 'all') list = list.filter(function(p){ return p.status === punchStatusFilter; });
-  if(punchLocationFilter === PROJECT_WIDE_SCOPE) list= list.filter(function(p){ return !p.location; });
-  else if(punchLocationFilter) list = list.filter(function(p){ return p.location === punchLocationFilter; });
+  if(punchOwnershipFilter) list = list.filter(function(p){ return (p.ownership || 'Field Tech/Install') === punchOwnershipFilter; });
   if(searchQuery.trim()) list = list.filter(function(p){ return matchesSearch(p.description) || matchesSearch(p.deviceName) || matchesSearch(p.location); });
 
   let html = '<div class="punch-toolbar">';
   ['open','resolved','all'].forEach(function(f){
     html += '<button class="chip' + (punchStatusFilter===f?' active':'') + '" data-pfilter="' + f + '">' + f.charAt(0).toUpperCase()+f.slice(1) + '</button>';
   });
-  html += '<select id="punchLocFilter"><option value="">All locations</option>';
-  html += '<option value="' + PROJECT_WIDE_SCOPE + '"' + (punchLocationFilter===PROJECT_WIDE_SCOPE?' selected': '') + '>General</option>';
-  LOCATIONS.forEach(function(l){
-    html += '<option value="' + esc(l.name) + '"' + (punchLocationFilter===l.name?' selected':'') + '>' + esc(l.name) + '</option>';
+  html += '<select id="punchOwnFilter"><option value="">All Types</option>';
+  OWNERSHIPS.forEach(function(o){
+    html += '<option value="' + esc(o) + '"' + (punchOwnershipFilter===o?' selected':'') + '>' + esc(o) + '</option>';
   });
   html += '</select>';
   html += '<button class="export-btn" id="exportCsv">Export CSV</button>';
@@ -987,8 +985,7 @@ function fptPunchSectionHtml(){
   if(STAGE !== 'field' || !FPT_REF.punches.length) return '';
   let list = FPT_REF.punches.slice().sort(function(a, b){ return (b.createdAt || '').localeCompare(a.createdAt || ''); });
   if(punchStatusFilter !== 'all') list = list.filter(function(p){ return p.status === punchStatusFilter; });
-  if(punchLocationFilter === PROJECT_WIDE_SCOPE) list = list.filter(function(p){ return !p.location; });
-  else if(punchLocationFilter) list = list.filter(function(p){ return p.location === punchLocationFilter; });
+  if(punchOwnershipFilter) list = list.filter(function(p){ return (p.ownership || 'Field Tech/Install') === punchOwnershipFilter; });
   if(searchQuery.trim()) list = list.filter(function(p){ return matchesSearch(p.description) || matchesSearch(p.deviceName) || matchesSearch(p.location); });
   let html = '<div class="section-label" style="margin:18px 2px 8px;">FPT punch items (read only)</div>';
   if(!list.length) return html + '<div class="empty" style="padding:14px 10px;">None match.</div>';
@@ -1531,7 +1528,8 @@ const XL_COLORS = {
   // Ownership was also signaling urgency.
   OWN_FIELD_BG: 'FFDFF5F2', OWN_FIELD_TXT: 'FF0E7C71',
   OWN_PROGRAMMING_BG: 'FFEFE6FB', OWN_PROGRAMMING_TXT: 'FF6B3FC2',
-  OWN_CONFIG_BG: 'FFFBF1D2', OWN_CONFIG_TXT: 'FF8A6D14'
+  OWN_CONFIG_BG: 'FFFBF1D2', OWN_CONFIG_TXT: 'FF8A6D14',
+  OWN_DESIGN_BG: 'FFF7E3E7', OWN_DESIGN_TXT: 'FF971B2F'
 };
 function xlFill(argb){ return {type:'pattern', pattern:'solid', fgColor:{argb: argb}}; }
 
@@ -1569,7 +1567,7 @@ function ownershipCellStyle(own){
   if(own === 'Field Tech/Install') return {bg: XL_COLORS.OWN_FIELD_BG, txt: XL_COLORS.OWN_FIELD_TXT};
   if(own === 'Programming') return {bg: XL_COLORS.OWN_PROGRAMMING_BG, txt: XL_COLORS.OWN_PROGRAMMING_TXT};
   if(own === 'Configuration') return {bg: XL_COLORS.OWN_CONFIG_BG, txt: XL_COLORS.OWN_CONFIG_TXT};
-  if(own === 'Design') return {bg: XL_COLORS.OWN_FIELD_BG, txt:XL_COLORS.OWN_FIELD_TXT};
+  if(own === 'Design') return {bg: XL_COLORS.OWN_DESIGN_BG, txt:XL_COLORS.OWN_DESIGN_TXT};
   return {bg: XL_COLORS.GRAVEL_BG, txt: XL_COLORS.GRAVEL_TXT};
 }
 function statusCellStyle(status){
@@ -2228,7 +2226,7 @@ document.getElementById('content').addEventListener('click', function(e){
   if(exportBtn){ exportCsv(); return; }
 });
 document.getElementById('content').addEventListener('change', function(e){
-  if(e.target.id === 'punchLocFilter'){ punchLocationFilter = e.target.value; renderContent(); }
+  if(e.target.id === 'punchOwnFilter'){ punchOwnershipFilter = e.target.value; renderContent(); }
   if(e.target.id === 'newDevice_category' && addingDeviceFor){ deviceDraft.category = e.target.value; }
 });
 document.getElementById('content').addEventListener('input', function(e){
