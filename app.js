@@ -1521,9 +1521,9 @@ function csvEscape(v){
 }
 async function exportCsv(){
   let list = punches.slice().sort(function(a,b){ return (b.createdAt||'').localeCompare(a.createdAt||''); });
-  const rows = [['Location','Device','Description','Severity','Ownership','Status','Reported By','Created','Resolved By','Resolved At']];
+  const rows = [['Location','Device','Description','Severity','Ownership','Status','Reported By']];
   list.forEach(function(p){
-    rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.ownership, p.status, p.reportedBy||'', p.createdAt||'', p.resolvedBy||'', p.resolvedAt||'']);
+    rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.ownership, p.status, p.reportedBy||'']);
   });
   const csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
   try{
