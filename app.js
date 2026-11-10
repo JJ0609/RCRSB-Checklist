@@ -563,6 +563,28 @@ function addDeviceFormHtml(){
   return html;
 }
 
+function untestedDevices(){
+  return DEVICES.filter(function(d){ return !isTested(d.id); });
+}
+function renderUntested(){
+  let list = untestedDevices();
+  if(searchQuery.trim()){
+    list = list.filter(function(d){ return deviceMatchesSearch(d) || matchesSearch(d.location); }) 
+  }
+  let html = '';
+  html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
+  html += '<div class="loc-header"><h2>Untested Devices</h2>'
+  + '<div class="meta"' + list.length + ' device' + (list.length===1?'':'s') + ' not fully tested yet, across all locations</div></div>';
+  html += '<div class="device-list">';
+  if(!list.length){
+    html += '<div class="empty">Every device has been tested.</div>';
+  } else {
+    list.forEach(function(d){ html += deviceCardHtml(d, true); });
+  }
+  html += '</div>';
+  document.getElementById('content').innerHTML = html;
+}
+
 function renderFailedChecks(){
   let list = DEVICES.filter(function(d){ return hasFail(d.id); });
   if(searchQuery.trim()){
@@ -763,6 +785,7 @@ function renderContent(){
   if(view === 'locations') renderLocations();
   else if(view === 'location-detail') renderLocationDetail();
   else if(view === 'failed-checks') renderFailedChecks();
+  else if(view === 'untested') renderUntested();
   else renderPunchList();
   renderStats();
   persistDraft();
@@ -2259,15 +2282,17 @@ document.getElementById('searchInput').addEventListener('input', function(e){
   if(view === 'location-detail') renderLocationDetail();
   else if(view === 'locations') renderLocations();
   else if(view === 'failed-checks') renderFailedChecks();
+  else if(view === 'untested') renderUntested();
   else renderPunchList();
 });
 function activateTab(name){
-  const locBtn = document.getElementById('tabLocations');
-  const punchBtn = document.getElementById('tabPunch');
-  const failBtn = document.getElementById("statFailCard");
-  if(name === 'punch'){ punchBtn.classList.add('active'); locBtn.classList.remove('active'); failBtn.classList.remove('active'); }
-  else if(name === 'failed-checks'){ failBtn.classList.add('active'); locBtn.classList.remove('active'); punchBtn.classList.remove('active'); }
-  else { locBtn.classList.add('active'); punchBtn.classList.remove('active'); failBtn.classList.remove('active'); }
+  const cards = {
+    locations: document.getElementById('tabLocations'), punch: document.getElementById('tabPunch'),
+    'failed-checks': document.getElementById('statFailCard'), untested: document.getElementById('statTestedCard')
+  };
+  Object.keys(cards).forEach(function(k){ if(cards[k]) cards[k].classList.remove('active'); });
+  const on = cards[name] || cards.locations;
+  if(on) on.classList.add('active');
 }
 document.getElementById('tabLocations').addEventListener('click', function(){
   view='locations'; currentLocation=null;
@@ -2286,8 +2311,12 @@ document.getElementById('statOpenCard').addEventListener('click', function(){
   renderContent();
 });
 document.getElementById('statTestedCard').addEventListener('click', function(){
-  
-})
+  view = 'untested';
+  searchQuery = '';
+  activateTab('untested');
+  document.getElementById('searchInput').value = '';
+  renderContent();
+});
 document.getElementById('statFailCard').addEventListener('click', function(){
   view = 'failed-checks';
   searchQuery = '';
