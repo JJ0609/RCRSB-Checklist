@@ -1526,6 +1526,7 @@ async function exportCsv(){
     rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.ownership, p.status, p.reportedBy||'']);
   });
   const csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
+  const projectDisplayName = currentProjectMeta.name || currentProject;
   try{
     const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
