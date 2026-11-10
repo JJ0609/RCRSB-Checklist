@@ -2187,7 +2187,7 @@ document.getElementById('content').addEventListener('click', function(e){
   if(saveEditNoteBtn){ submitNoteEdit(saveEditNoteBtn.getAttribute('data-device')); return; }
 
   const backBtn = e.target.closest('#backBtn');
-  if(backBtn){ view = 'locations'; renderContent(); return; }
+  if(backBtn){ view = 'locations'; renderContent(); window.location.reload(); return; }
 
   const roomStep = e.target.closest('[data-room-step]');
   if(roomStep){ if(!roomStep.disabled) goToAdjacentRoom(roomStep.getAttribute('data-room-step')); return; }
