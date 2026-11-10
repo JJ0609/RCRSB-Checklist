@@ -2114,6 +2114,7 @@ document.getElementById('content').addEventListener('click', function(e){
     const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
     const keepSearch = view === 'locations' && !!searchQuery.trim() && !!loc && loc.devices.some(deviceMatchesSearch);
     view = 'location-detail';
+    activateTab('locations');
     if(!keepSearch){ searchQuery = ''; document.getElementById('searchInput').value = ''; }
     renderContent();
     return;
