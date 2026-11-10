@@ -349,7 +349,7 @@ function deviceMatchesSearch(d){
 let openSections = {};   // 'ROOM|control' -> true / false (what they chose); absent = the default
 function sectionsKey(){ return 'pd_sections_' + currentProject + '_' + DEVICE_TYPE; }
 function loadOpenSections(){
-  try{ openSections = JSON.parse(sessionStorage.getItem(sectionsKey()) || '{}') || {}; }catch(e){ openSections = {}; }
+ // try{ openSections = JSON.parse(sessionStorage.getItem(sectionsKey()) || '{}') || {}; }catch(e){ openSections = {}; }
 }
 function saveOpenSections(){
  // try{ sessionStorage.setItem(sectionsKey(), JSON.stringify(openSections)); }catch(e){}
