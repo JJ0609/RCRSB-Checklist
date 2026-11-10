@@ -2125,13 +2125,13 @@ document.getElementById('content').addEventListener('click', function(e){
   if(cancelAddLocationBtn){ addingLocation = false; locationDraftText = ''; renderContent(); return; }
   const submitAddLocationBtn = e.target.closest('#submitAddLocation');
   if(submitAddLocationBtn){ submitAddLocation(); return; }
-  //const catToggle = e.target.closest('[data-cat-toggle]');
-  //if(catToggle){
-  //  openSections[currentLocation + '|' + catToggle.getAttribute('data-cat-toggle')] = catToggle.getAttribute('aria-expanded') !== 'true';
+  const catToggle = e.target.closest('[data-cat-toggle]');
+  if(catToggle){
+    openSections[currentLocation + '|' + catToggle.getAttribute('data-cat-toggle')] = catToggle.getAttribute('aria-expanded') !== 'true';
   //  saveOpenSections();
-  //  renderContent();
-  //  return;
-  //}
+    renderContent();
+    return;
+  }
   const catAdd = e.target.closest('[data-cat-add]');
   if(catAdd){
     const key = catAdd.getAttribute('data-cat-add');
