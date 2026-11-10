@@ -408,6 +408,7 @@ function goToAdjacentRoom(dir){
   const next = i === -1 ? null : LOCATIONS[i + (dir === 'prev' ? -1 : 1)];
   if(!next) return;
   currentLocation = next.name;
+  openSections = {};
   view = 'location-detail';
   searchQuery = '';
   document.getElementById('searchInput').value = '';
@@ -2109,6 +2110,7 @@ document.getElementById('content').addEventListener('click', function(e){
   const locCard = e.target.closest('[data-loc]');
   if(locCard){
     currentLocation = locCard.getAttribute('data-loc');
+    openSections = {};
     // Came here by searching for a device on the room list: keep the search in the box, so the room opens already showing that device
     // instead of making the person search for it again. (A search that only matched the room's name is cleared, as before.)
     const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
@@ -2188,7 +2190,7 @@ document.getElementById('content').addEventListener('click', function(e){
   if(saveEditNoteBtn){ submitNoteEdit(saveEditNoteBtn.getAttribute('data-device')); return; }
 
   const backBtn = e.target.closest('#backBtn');
-  if(backBtn){ view = 'locations'; renderContent(); window.location.reload(); return; }
+  if(backBtn){ view = 'locations'; activateTab('locations'); renderContent(); return; }
 
   const roomStep = e.target.closest('[data-room-step]');
   if(roomStep){ if(!roomStep.disabled) goToAdjacentRoom(roomStep.getAttribute('data-room-step')); return; }
@@ -2430,7 +2432,11 @@ function restoreDraft(){
   // Show where the draft lives (a device draft wins if there are two).
   searchQuery = '';
   const searchBox = document.getElementById('searchInput'); if(searchBox) searchBox.value = '';
-  if(dev){ currentLocation = dev.location; view = 'location-detail'; activateTab('locations'); }
+  if(dev){
+  currentLocation = dev.location; view = 'location-detail'; activateTab('locations');
+  // NEW: the restored form lives inside its section, so open that one
+  openSections[dev.location + '|' + (['control', 'audio', 'video'].indexOf(dev.category) !== -1 ? dev.category : 'other')] = true;
+}
   else if(d.loc.scope === PROJECT_WIDE_SCOPE){ view = 'punch'; activateTab('punch'); }
   else { currentLocation = d.loc.scope; view = 'location-detail'; activateTab('locations'); }
   renderContent();
