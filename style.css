@@ -430,3 +430,6 @@ a{color:inherit; touch-action: manipulation;}
   .topbar-row{justify-content:space-between;}
   .topbar-titles{order:-1;flex:1 1 100%;margin-bottom:6px;text-align:center;}
 }
+
+.device-model .loc[data-loc]{cursor:pointer;}
+.device-model .loc[data-loc]:hover{text-decoration:underline;color:var(--accent);}

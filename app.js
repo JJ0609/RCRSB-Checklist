@@ -650,7 +650,7 @@ function deviceCardHtml(d, showLocation){
   let html = '<div class="device-card" data-device="' + esc(d.id) + '">';
   html += '<div class="device-top"><div>'
     + '<div class="device-name">' + esc(isZoneRow(d) ? d.name + ' \u00b7 ' + d.zone : d.name) + '</div>'
-    + '<div class="device-model">' + esc(isZoneRow(d) ? 'Speaker zone' : (d.model || 'Model not specified'))
+    + (showLocation ? ' &middot; <span class="loc" data-loc="' + esc(d.location) + '">' + esc(d.location) + '</span>' : '') + '</div>'
     + (showLocation ? ' &middot; ' + esc(d.location) : '') + '</div>'
     + '</div></div>';
   html += '<div class="device-data mono">';
@@ -2114,6 +2114,7 @@ document.getElementById('content').addEventListener('click', function(e){
     const loc = LOCATIONS.find(function(l){ return l.name === currentLocation; });
     const keepSearch = view === 'locations' && !!searchQuery.trim() && !!loc && loc.devices.some(deviceMatchesSearch);
     view = 'location-detail';
+    activateTab('locations');
     if(!keepSearch){ searchQuery = ''; document.getElementById('searchInput').value = ''; }
     renderContent();
     return;
