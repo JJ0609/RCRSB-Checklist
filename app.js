@@ -576,7 +576,7 @@ function renderUntested(){
   let html = '';
   html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
   html += '<div class="loc-header"><h2>Untested Devices</h2>'
-  + '<div class="meta"' + list.length + ' device' + (list.length===1?'':'s') + ' not fully tested yet, across all locations</div></div>';
+  + '<div class="meta"' + list.length + ' device' + (list.length===1?'':'s') + ' not fully tested yet, across all locations</div>';
   html += '<div class="device-list">';
   if(!list.length){
     html += '<div class="empty">Every device has been tested.</div>';
