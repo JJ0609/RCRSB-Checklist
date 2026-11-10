@@ -352,7 +352,7 @@ function loadOpenSections(){
   try{ openSections = JSON.parse(sessionStorage.getItem(sectionsKey()) || '{}') || {}; }catch(e){ openSections = {}; }
 }
 function saveOpenSections(){
-  try{ sessionStorage.setItem(sectionsKey(), JSON.stringify(openSections)); }catch(e){}
+ // try{ sessionStorage.setItem(sectionsKey(), JSON.stringify(openSections)); }catch(e){}
 }
 
 // A room's devices split into the sections on its page, in a fixed order, empty ones left out. A device with no
@@ -565,6 +565,8 @@ function addDeviceFormHtml(){
 
 function untestedDevices(){
   return DEVICES.filter(function(d){ return !isTested(d.id); });
+  // The line below will set it so that only devices with no checks completed will show, vs the current way (devices that have at least one check uncompleted)
+  // return DEVICES.filter(function(d){ const c = getCheck(d.id); return checksFor(d).every(function(chk){ return !c[chk.key]; }); });
 }
 function renderUntested(){
   let list = untestedDevices();
