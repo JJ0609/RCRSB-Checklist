@@ -576,7 +576,7 @@ function renderUntested(){
   let html = '';
   html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
   html += '<div class="loc-header"><h2>Untested Devices</h2>'
-  + '<div class="meta"' + list.length + ' device' + (list.length===1?'':'s') + ' not fully tested yet, across all locations </div></div>';
+  + '<div class="meta">' + list.length + ' device' + (list.length===1?'':'s') + ' not fully tested yet, across all locations </div></div>';
   html += '<div class="device-list">';
   if(!list.length){
     html += '<div class="empty">Every device has been tested.</div>';
@@ -651,7 +651,7 @@ function deviceCardHtml(d, showLocation){
   html += '<div class="device-top"><div>'
     + '<div class="device-name">' + esc(isZoneRow(d) ? d.name + ' \u00b7 ' + d.zone : d.name) + '</div>'
     + '<div class="device-model">' + esc(isZoneRow(d) ? 'Speaker zone' : (d.model || 'Model not specified'))
-    + (showLocation ? ' &middot; ' + esc(d.location) : '') + '</div>'
+    + (showLocation ? ' &middot; <span class="loc" data-loc="' + esc(d.location) + '">' + esc(d.location) + '</span>' : '') + '</div>'
     + '</div></div>';
   html += '<div class="device-data mono">';
   if(d.cresnetId) html += '<span>Cresnet ID <b>' + esc(d.cresnetId) + '</b></span>';
