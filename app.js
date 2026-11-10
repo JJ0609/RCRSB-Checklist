@@ -943,7 +943,7 @@ function renderStageHeader(){
       renderContent();
     });
     // going back to any of the normal tabs leaves the notice
-    ['tabLocations', 'tabPunch', 'statOpenCard', 'statFailCard'].forEach(function(id){
+    ['tabLocations', 'tabPunch', 'statOpenCard', 'statFailCard', 'statTestedCard'].forEach(function(id){
       const el = document.getElementById(id);
       if(el) el.addEventListener('click', function(){ if(showingPendingField){ showingPendingField = false; updateStageButtons(); } }, true);
     });
@@ -2285,6 +2285,9 @@ document.getElementById('statOpenCard').addEventListener('click', function(){
   activateTab('punch');
   renderContent();
 });
+document.getElementById('statTestedCard').addEventListener('click', function(){
+  
+})
 document.getElementById('statFailCard').addEventListener('click', function(){
   view = 'failed-checks';
   searchQuery = '';
