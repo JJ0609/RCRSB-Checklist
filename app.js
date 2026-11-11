@@ -90,6 +90,7 @@ let punchStatusFilter = 'open';
 let punchOwnershipFilters = OWNERSHIPS.slice();   // the types that are ticked = shown. All ticked = no filter, like Excel
 let punchSeverityFilters = SEVERITIES.slice();    // same for severity
 let openFilterMenu = '';                          // which dropdown is open: '' | 'own' | 'sev'
+let untestedKeep = {};   // ids shown on the Untested page this visit: they stay until the page is opened again
 let openPunchFormFor = null;
 let editingPunchId = null;
 let editingNotesId = null;
@@ -572,19 +573,28 @@ function untestedDevices(){
   // return DEVICES.filter(function(d){ const c = getCheck(d.id); return checksFor(d).every(function(chk){ return !c[chk.key]; }); });
 }
 function renderUntested(){
-  let list = untestedDevices();
+  // A device stays on this page for as long as you are on it, even once its checks are all done: otherwise the last tap made it vanish
+  // before it could be tapped on to Fail (or back to Untested). It leaves the list the next time the page is opened.
+  untestedDevices().forEach(function(d){ untestedKeep[d.id] = true; });
+  let list = DEVICES.filter(function(d){ return untestedKeep[d.id]; });
   if(searchQuery.trim()){
-    list = list.filter(function(d){ return deviceMatchesSearch(d) || matchesSearch(d.location); }) 
+    list = list.filter(function(d){ return deviceMatchesSearch(d) || matchesSearch(d.location); });
   }
+  const finished = list.filter(function(d){ return isTested(d.id); }).length;
+  const left = list.length - finished;
   let html = '';
   html += '<div class="back-row"><button class="back-btn" id="backBtn">&larr; All locations</button></div>';
   html += '<div class="loc-header"><h2>Untested Devices</h2>'
-  + '<div class="meta">' + list.length + ' device' + (list.length===1?'':'s') + ' not fully tested yet, across all locations </div></div>';
+  + '<div class="meta">' + left + ' device' + (left===1?'':'s') + ' not fully tested yet, across all locations'
+  + (finished ? ' &middot; ' + finished + ' finished here (dimmed - they leave this list when you open it again)' : '') + '</div></div>';
   html += '<div class="device-list">';
   if(!list.length){
     html += '<div class="empty">Every device has been tested.</div>';
   } else {
-    list.forEach(function(d){ html += deviceCardHtml(d, true); });
+    list.forEach(function(d){
+      const card = deviceCardHtml(d, true);
+      html += isTested(d.id) ? '<div class="untested-done" style="opacity:.6;">' + card + '</div>' : card;
+    });
   }
   html += '</div>';
   document.getElementById('content').innerHTML = html;
@@ -2414,6 +2424,7 @@ document.getElementById('statOpenCard').addEventListener('click', function(){
 });
 document.getElementById('statTestedCard').addEventListener('click', function(){
   view = 'untested';
+  untestedKeep = {};   // opening (or re-tapping) the card starts the list afresh
   searchQuery = '';
   activateTab('untested');
   document.getElementById('searchInput').value = '';
