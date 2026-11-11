@@ -723,10 +723,13 @@ function punchFilterRowsHtml(){
   const chip = function(attr, value, label, on){
     return '<button class="chip' + (on ? ' active' : '') + '" ' + attr + '="' + esc(value) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(label) + '</button>';
   };
+  const label = function(text){
+    return '<span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-right:2px;">' + text + '</span>';
+  };
   const anyOn = punchOwnershipFilters.length || punchSeverityFilters.length;
   return '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">'
     + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">' + label('Type')
-    + OWNERSHIPS.map(function(o){ return chip('data-pown', o, o, punchOwnershipFilters.indexOf(o) !== -1); }).join('') + '</div>'
+    + OWNERSHIPS.map(function(o){ return chip('data-pown]', o, o, punchOwnershipFilters.indexOf(o) !== -1); }).join('') + '</div>'
     + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">' + label('Severity')
     + SEVERITIES.map(function(s){ return chip('data-psev', s, s.charAt(0).toUpperCase() + s.slice(1), punchSeverityFilters.indexOf(s) !== -1); }).join('')
     + (anyOn ? '<button class="chip" id="clearPunchFilters" style="margin-left:auto;">Clear filters</button>' : '') + '</div>'
@@ -753,7 +756,7 @@ function renderPunchList(){
   }
 
   if(!list.length){
-    html += '<div class="empty">' + ((punchOwnershipFilters.length || punchSeverityFilters.length) ? 'No punch items match these filters.' : 'No punxh items here yet.') + '</div>';
+    html += '<div class="empty">' + ((punchOwnershipFilters.length || punchSeverityFilters.length) ? 'No punch items match these filters.' : 'No punch items here yet.') + '</div>';
   } else {
     list.forEach(function(p){
       if(editingPunchId === p.id){
