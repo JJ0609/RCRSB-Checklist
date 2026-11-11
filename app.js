@@ -87,8 +87,9 @@ let view = 'locations';
 let currentLocation = null;
 let searchQuery = '';
 let punchStatusFilter = 'open';
-let punchOwnershipFilters = [];
-let punchSeverityFilters = [];
+let punchOwnershipFilters = OWNERSHIPS.slice();   // the types that are ticked = shown. All ticked = no filter, like Excel
+let punchSeverityFilters = SEVERITIES.slice();    // same for severity
+let openFilterMenu = '';                          // which dropdown is open: '' | 'own' | 'sev'
 let openPunchFormFor = null;
 let editingPunchId = null;
 let editingNotesId = null;
@@ -709,31 +710,69 @@ function deviceCardHtml(d, showLocation){
   return html;
 }
 
+// One rule for every punch list on screen (the field's own, and FPT's read-only copy on the Field side).
+// Each dropdown works like an Excel filter: the ticked values are shown, everything ticked means no limit from that dropdown, and the two
+// dropdowns narrow each other (and the Open / Resolved / All buttons).
+function punchFiltersOn(){
+  return punchOwnershipFilters.length < OWNERSHIPS.length || punchSeverityFilters.length < SEVERITIES.length;
+}
 function passesPunchFilters(p){
   if(punchStatusFilter !== 'all' && p.status !== punchStatusFilter) return false;
-  if(punchOwnershipFilters.length && punchOwnershipFilters.indexOf(p.ownership || 'Field Tech/Install') === -1) return false;
-  if(punchSeverityFilters.length && punchSeverityFilters.indexOf(p.severity || 'minor') === -1) return false;
+  if(punchOwnershipFilters.length < OWNERSHIPS.length && punchOwnershipFilters.indexOf(p.ownership || 'Field Tech/Install') === -1) return false;
+  if(punchSeverityFilters.length < SEVERITIES.length && punchSeverityFilters.indexOf(p.severity || 'minor') === -1) return false;
   return true;
 }
-function toggleInList(list, value){
+function setFilterValue(key, value, on){
+  const list = key === 'own' ? punchOwnershipFilters : punchSeverityFilters;
   const i = list.indexOf(value);
-  if(i === -1) list.push(value); else list.splice(i, 1);
+  if(on && i === -1) list.push(value);
+  if(!on && i !== -1) list.splice(i, 1);
 }
-function punchFilterRowsHtml(){
-  const chip = function(attr, value, label, on){
-    return '<button class="chip' + (on ? ' active' : '') + '" ' + attr + '="' + esc(value) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(label) + '</button>';
-  };
-  const label = function(text){
-    return '<span style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-right:2px;">' + text + '</span>';
-  };
-  const anyOn = punchOwnershipFilters.length || punchSeverityFilters.length;
-  return '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">'
-    + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">' + label('Type')
-    + OWNERSHIPS.map(function(o){ return chip('data-pown]', o, o, punchOwnershipFilters.indexOf(o) !== -1); }).join('') + '</div>'
-    + '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">' + label('Severity')
-    + SEVERITIES.map(function(s){ return chip('data-psev', s, s.charAt(0).toUpperCase() + s.slice(1), punchSeverityFilters.indexOf(s) !== -1); }).join('')
-    + (anyOn ? '<button class="chip" id="clearPunchFilters" style="margin-left:auto;">Clear filters</button>' : '') + '</div>'
-    + '</div>';
+function setFilterAll(key, on){
+  if(key === 'own') punchOwnershipFilters = on ? OWNERSHIPS.slice() : [];
+  else punchSeverityFilters = on ? SEVERITIES.slice() : [];
+}
+function resetPunchFilters(){
+  punchOwnershipFilters = OWNERSHIPS.slice();
+  punchSeverityFilters = SEVERITIES.slice();
+}
+function filterCheckRow(text, checked, attrs){
+  return '<label style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--ink);">'
+    + '<input type="checkbox" ' + attrs + (checked ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:var(--accent);flex:none;margin:0;">'
+    + '<span>' + esc(text) + '</span></label>';
+}
+function filterMenuHtml(key, title, options, selected){
+  const open = openFilterMenu === key;
+  const on = selected.length < options.length;
+  let html = '<div class="filter-menu" style="position:relative;">'
+    + '<button type="button" class="chip' + (on ? ' active' : '') + '" data-fmenu="' + key + '" aria-haspopup="true" aria-expanded="' + (open ? 'true' : 'false') + '">'
+    + esc(title) + (on ? ' (' + selected.length + ' of ' + options.length + ')' : '') + ' &#9662;</button>';
+  if(open){
+    html += '<div class="filter-panel" role="group" aria-label="' + esc(title) + ' filter" style="position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:220px;background:var(--surface);border:1px solid var(--border-strong);border-radius:12px;box-shadow:var(--shadow);padding:6px;">'
+      + filterCheckRow('(Select all)', selected.length === options.length, 'data-fall="' + key + '"')
+      + '<div style="height:1px;background:var(--border);margin:4px 6px;"></div>'
+      + options.map(function(o){ return filterCheckRow(o.label, selected.indexOf(o.value) !== -1, 'data-fopt="' + key + '" data-fval="' + esc(o.value) + '"'); }).join('')
+      + '</div>';
+  }
+  return html + '</div>';
+}
+function punchFilterMenusHtml(){
+  return filterMenuHtml('own', 'Type', OWNERSHIPS.map(function(o){ return {value: o, label: o}; }), punchOwnershipFilters)
+    + filterMenuHtml('sev', 'Severity', SEVERITIES.map(function(s){ return {value: s, label: s.charAt(0).toUpperCase() + s.slice(1)}; }), punchSeverityFilters)
+    + (punchFiltersOn() ? '<button type="button" class="chip" id="clearPunchFilters">Clear filters</button>' : '');
+}
+// "(Select all)" shows the half-ticked dash while only some of the values are ticked. That can only be set from script, after the screen is drawn.
+function syncFilterMenuState(){
+  const all = document.querySelector('input[data-fall]');
+  if(!all) return;
+  const own = all.getAttribute('data-fall') === 'own';
+  const n = (own ? punchOwnershipFilters : punchSeverityFilters).length, total = (own ? OWNERSHIPS : SEVERITIES).length;
+  all.indeterminate = n > 0 && n < total;
+}
+function closeFilterMenu(){
+  openFilterMenu = '';
+  document.querySelectorAll('.filter-panel').forEach(function(p){ p.remove(); });
+  document.querySelectorAll('[data-fmenu]').forEach(function(b){ b.setAttribute('aria-expanded', 'false'); });
 }
 
 function renderPunchList(){
@@ -745,9 +784,9 @@ function renderPunchList(){
   ['open','resolved','all'].forEach(function(f){
     html += '<button class="chip' + (punchStatusFilter===f?' active':'') + '" data-pfilter="' + f + '">' + f.charAt(0).toUpperCase()+f.slice(1) + '</button>';
   });
+  html += punchFilterMenusHtml();
   html += '<button class="export-btn" id="exportCsv" style="margin-left:auto;">Export CSV</button>';
   html += '</div>';
-  html += punchFilterRowsHtml();
 
   if(addingLocationPunchFor === PROJECT_WIDE_SCOPE){
     html += locationPunchFormHtml();
@@ -756,7 +795,7 @@ function renderPunchList(){
   }
 
   if(!list.length){
-    html += '<div class="empty">' + ((punchOwnershipFilters.length || punchSeverityFilters.length) ? 'No punch items match these filters.' : 'No punch items here yet.') + '</div>';
+        html += '<div class="empty">' + (punchFiltersOn() ? 'No punch items match these filters.' : 'No punch items here yet.') + '</div>';
   } else {
     list.forEach(function(p){
       if(editingPunchId === p.id){
@@ -800,6 +839,7 @@ function renderPunchList(){
   }
   html += fptPunchSectionHtml();
   document.getElementById('content').innerHTML = html;
+  syncFilterMenuState();
   if(addingLocationPunchFor === PROJECT_WIDE_SCOPE){
     const ta = document.getElementById('locationPunchDesc');
     if(ta) ta.focus();
@@ -808,6 +848,7 @@ function renderPunchList(){
 
 function renderContent(){
   if(showingPendingField){ renderFieldPending(); renderStats(); return; }
+  if(view !== 'punch') openFilterMenu = '';
   if(view === 'locations') renderLocations();
   else if(view === 'location-detail') renderLocationDetail();
   else if(view === 'failed-checks') renderFailedChecks();
@@ -2280,17 +2321,40 @@ document.getElementById('content').addEventListener('click', function(e){
   const pfilter = e.target.closest('[data-pfilter]');
   if(pfilter){ punchStatusFilter = pfilter.getAttribute('data-pfilter'); renderContent(); return; }
 
-  const pOwn = e.target.closest('[data-pown');
-  if(pOwn){ toggleInList(punchOwnershipFilters, pOwn.getAttribute('data-pown')); renderContent(); return; }
-
-  const pSev = e.target.closest('[data-psev]');
-  if(pSev){ toggleInList(punchSeverityFilters, pSev.getAttribute('data-psev')); renderContent(); return; }
-
+  const fMenu = e.target.closest('[data-fmenu]');
+  if(fMenu){ const k = fMenu.getAttribute('data-fmenu'); openFilterMenu = (openFilterMenu === k ? '' : k); renderContent(); return; }
+  const fAll = e.target.closest('input[data-fall]');
+  if(fAll){
+    setFilterAll(fAll.getAttribute('data-fall'), fAll.checked);
+    renderContent();
+    const again = document.querySelector('input[data-fall]'); if(again) again.focus();   // the screen was redrawn: keep the keyboard where it was
+    return;
+  }
+  const fOpt = e.target.closest('input[data-fopt]');
+  if(fOpt){
+    const k = fOpt.getAttribute('data-fopt'), v = fOpt.getAttribute('data-fval');
+    setFilterValue(k, v, fOpt.checked);
+    renderContent();
+    const again = Array.prototype.find.call(document.querySelectorAll('input[data-fopt]'), function(x){ return x.getAttribute('data-fopt') === k && x.getAttribute('data-fval') === v; });
+    if(again) again.focus();
+    return;
+  }
   const pClear = e.target.closest('#clearPunchFilters');
-  if(pClear){ punchOwnershipFilters = []; punchSeverityFilters = []; renderContent(); return; }
+  if(pClear){ resetPunchFilters(); renderContent(); return; }
 
   const exportBtn = e.target.closest('#exportCsv');
   if(exportBtn){ exportCsv(); return; }
+});
+// A click anywhere outside an open filter dropdown, or Escape, closes it.
+document.addEventListener('click', function(e){
+  if(!openFilterMenu || e.target.closest('.filter-menu')) return;
+  closeFilterMenu();
+});
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Escape' || !openFilterMenu) return;
+  const k = openFilterMenu;
+  closeFilterMenu();
+  const btn = document.querySelector('[data-fmenu="' + k + '"]'); if(btn) btn.focus();
 });
 document.getElementById('content').addEventListener('change', function(e){
   if(e.target.id === 'newDevice_category' && addingDeviceFor){ deviceDraft.category = e.target.value; }
