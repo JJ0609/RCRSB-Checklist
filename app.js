@@ -1524,7 +1524,7 @@ async function exportCsv(){
   const rows = [['Location','Device','Description','Severity','Ownership','Reported By']];
   list.forEach(function(p){
     if(p.status === 'open'){
-      rows.push([(p.location||''), p.deviceName, p.description, p.severity, p.ownership, p.reportedBy||'']);
+      rows.push([(p.location||'General'), (p.deviceName||'General'), p.description, p.severity, p.ownership, p.reportedBy||'']);
     }
   });
   const csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
